@@ -2,7 +2,7 @@
 
 A first draft of a long-distance relationship app: **pair accounts → set preferences and available hours → find overlap → show three activities → both accept → save the plan**.
 
-Built with React + TypeScript + Vite, Motion, Lucide, and an Express/Node API written in TypeScript. Supabase provides live authentication and shared persistence. Google Calendar contributes busy times. TMDB provides movie discovery.
+Built with React + TypeScript + Vite, Motion, Lucide, and an Express/Node API written in TypeScript. Supabase provides live authentication and shared persistence. Google Calendar contributes busy times. TMDB, RAWG, and TheMealDB provide movie, co-op game, and recipe ideas.
 
 ## Try the draft
 
@@ -27,7 +27,7 @@ Demo sessions are isolated by a browser-stored random token; state persists in i
 
 ## Connect your existing projects
 
-No Codex plugins are needed to run these integrations. Configure your app's credentials in the ignored `backend/.env` file; do not paste secrets into chat or commit them.
+No Codex plugins are needed to run these integrations. Configure your app's credentials in the ignored `backend/.env` file; do not paste secrets into chat or commit them. For compatibility, provider keys in a local `backend/apis.env` are also read when the same key isn't set in `backend/.env`.
 
 ```sh
 cp backend/.env.example backend/.env
@@ -39,13 +39,13 @@ Use the generated hex value for `TOKEN_ENCRYPTION_KEY` and keep it stable. Repla
 ### 1. Supabase: accounts and plans
 
 - Run [`supabase/schema.sql`](supabase/schema.sql) once in your project's SQL Editor. It creates `rooms`, `memberships`, `calendar_tokens`, `oauth_states`, and two transactional pairing functions. Review existing table names before applying to a project that already has data.
-- Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and the server-only `SUPABASE_SERVICE_ROLE_KEY` in `backend/.env` using your project's API settings. This draft uses the legacy `anon` and `service_role` JWT keys.
+- Set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY` in `backend/.env` from your project's **Connect** dialog or **Settings → API Keys**. The publishable key is sent to the browser for Supabase Auth; the secret key stays on the Express server and bypasses RLS, so never expose it in frontend code or a `VITE_` variable.
 - In **Authentication → URL Configuration**, set the Site URL to `http://localhost:5173` and allow `http://localhost:5173` as a redirect URL.
 - Enable email authentication. Sign-in uses emailed magic links with PKCE; open each link in the same browser that requested it.
 - Supabase's built-in email sender restricts delivery and is rate limited. Configure a custom SMTP provider in Supabase before testing with arbitrary partner email addresses.
 - Set `APP_MODE=live` and restart `npm run dev`. Create two actual accounts, then share a one-use invite code. Codes expire after 24 hours.
 
-Tables have RLS enabled and no browser access policies. All application data requests go through Express, which validates the Supabase access token, derives the user ID from that validated token, and checks membership before using its server-side database client. The service-role key never reaches the browser. Invitations are stored as SHA-256 digests. Row locking and a unique user membership prevent double joins; optimistic version checks prevent concurrent acceptances from overwriting each other.
+Tables have RLS enabled and no browser access policies. All application data requests go through Express, which validates the Supabase access token, derives the user ID from that validated token, and checks membership before using its server-side database client. The secret key never reaches the browser. Invitations are stored as SHA-256 digests. Row locking and a unique user membership prevent double joins; optimistic version checks prevent concurrent acceptances from overwriting each other.
 
 Partner state refreshes every 10 seconds. This draft uses polling, not Supabase Realtime.
 
@@ -73,6 +73,15 @@ The server discovers movies in genres both partners selected, checks actual runt
 
 Curated conversation/creative activities fill remaining slots. TMDB outages show a notice and preserve those alternatives. Without credentials, demo movie-night cards are explicitly labeled as samples. Movie descriptions are not sent to an LLM.
 
+### 4. RAWG and TheMealDB: game and recipe ideas
+
+- Get a RAWG key from [RAWG API docs](https://rawg.io/apidocs) and set `RAWG_API_KEY` in `backend/.env`. The server requests highly rated games tagged for online co-op and adds a link back to RAWG. Follow RAWG's current plan, request limits, and attribution terms.
+- TheMealDB's free developer test key is `1`, so `THEMEALDB_API_KEY=1` works for local development. Replace it with a supporter key if you have one. The server requests one random recipe and links to its recipe/source page.
+- Both services are called only by the backend; keys are not sent to the browser. If RAWG isn't configured or a provider is unavailable, the app keeps the other provider results and curated ideas.
+- Game ideas reserve 60 minutes and recipe ideas reserve 90 minutes in the shared schedule. Check the game platforms and recipe preparation time before confirming a date.
+
+The relevant settings are in the optional integration section of `backend/.env.example`. Copy it to `backend/.env` if you haven't already, add `RAWG_API_KEY`, and keep `THEMEALDB_API_KEY=1` or replace it with your supporter key. Restart the backend after editing the file. See the [RAWG API docs](https://rawg.io/apidocs) and [TheMealDB API guide](https://www.themealdb.com/docs_api_guide.php) for current access details.
+
 Data attribution appears in **Connections**. TMDB noncommercial use requires attribution; commercial use needs their licensing review. Watch-provider data is from JustWatch.
 
 ## Verification
@@ -85,7 +94,7 @@ npm run format
 
 Tests cover DST, fractional timezone offsets, weekdays, duration limits, calendar conflicts, missing/no overlap, outsiders, expired dates, idempotent votes, single-use pairing, persistent saved plans, and cancellation. The API integration test uses a temporary data directory and a separate loopback port; it does not touch your Supabase project.
 
-Live Supabase SQL/auth, Google consent/token refresh, and authenticated TMDB responses must be verified with your project credentials. The local test suite does not claim to verify those external services.
+Live Supabase SQL/auth, Google consent/token refresh, and authenticated TMDB, RAWG, or TheMealDB responses require provider credentials and aren't exercised by the local test suite.
 
 ## Project layout
 
@@ -98,7 +107,7 @@ backend/src/index.ts       Authenticated API and OAuth callback
 backend/src/domain.ts      Availability matching and acceptance rules
 backend/src/store.ts       Local persistence and Supabase storage
 backend/src/calendar.ts    Google OAuth, encrypted tokens, and free/busy reads
-backend/src/activities.ts  TMDB matching and curated date ideas
+backend/src/activities.ts  TMDB, RAWG, TheMealDB, and curated date ideas
 backend/test/              Unit and API integration tests
 supabase/schema.sql        Database setup and private access rules
 backend/.env.example       Required integration settings

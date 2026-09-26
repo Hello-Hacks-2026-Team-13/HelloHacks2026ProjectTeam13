@@ -15,9 +15,11 @@ async function initializeOnce(): Promise<Config> {
   const config = (await response.json()) as Config;
   if (config.mode === "live") {
     const { createClient } = await import("@supabase/supabase-js");
-    supabase = createClient(config.supabaseUrl, config.supabaseAnonKey, {
-      auth: { flowType: "pkce" },
-    });
+    supabase = createClient(
+      config.supabaseUrl,
+      config.supabasePublishableKey,
+      { auth: { flowType: "pkce" } },
+    );
   } else if (!demoToken) {
     const response = await fetch("/api/demo/session", { method: "POST" });
     if (!response.ok)

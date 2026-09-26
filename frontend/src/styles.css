@@ -1197,9 +1197,26 @@ footer > span:first-child {
   display: grid;
   place-items: center;
 }
+.activity-link {
+  align-self: flex-start;
+  margin-top: 10px;
+  color: #9b5e4f;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .activity-art.movie {
   background-color: #7e6267;
   color: #ebd4bc;
+}
+.activity-art.game {
+  background-color: #656b78;
+  color: #e1dbcf;
+}
+.activity-art.meal {
+  background-color: #a77857;
+  color: #fff1dc;
 }
 .activity-art.conversation {
   background-color: #d6b798;

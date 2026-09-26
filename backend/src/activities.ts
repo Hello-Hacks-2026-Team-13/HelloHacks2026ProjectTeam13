@@ -65,6 +65,23 @@ async function tmdb(path: string) {
     );
   return response.json();
 }
+
+async function externalJson<T>(url: URL, provider: string): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+  } catch {
+    throw new Error(`${provider} suggestions are unavailable. Try again later.`);
+  }
+  if (!response.ok)
+    throw new Error(`${provider} returned HTTP ${response.status}.`);
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new Error(`${provider} returned an invalid response.`);
+  }
+}
+
 async function movies(room: Room): Promise<Activity[]> {
   const common = room.profiles[0].genres.filter((g) =>
     room.profiles[1].genres.includes(g),
@@ -111,29 +128,153 @@ async function movies(room: Room): Promise<Activity[]> {
   );
   return candidates.filter((v): v is Activity => v !== null);
 }
+
+type RawgGame = {
+  id: number;
+  slug: string;
+  name: string;
+  background_image: string | null;
+  rating: number;
+  genres?: { name: string }[];
+};
+
+async function games(): Promise<Activity[]> {
+  const apiKey = process.env.RAWG_API_KEY?.trim();
+  if (!apiKey) return [];
+
+  const url = new URL("https://api.rawg.io/api/games");
+  url.searchParams.set("key", apiKey);
+  url.searchParams.set("tags", "online-co-op");
+  url.searchParams.set("ordering", "-rating");
+  url.searchParams.set("page_size", "12");
+
+  const result = await externalJson<{ results?: RawgGame[] }>(url, "RAWG");
+  return (result.results || []).slice(0, 6).map(
+    (game): Activity => ({
+      id: `rawg-${game.id}`,
+      title: game.name,
+      subtitle: [
+        game.rating ? `${game.rating.toFixed(1)} RAWG rating` : "Online co-op",
+        game.genres?.[0]?.name,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      description:
+        "Try this online co-op game together. Check its supported platforms and access requirements before your date.",
+      minutes: 60,
+      kind: "game",
+      source: "rawg",
+      poster: game.background_image || undefined,
+      url: `https://rawg.io/games/${encodeURIComponent(game.slug)}`,
+    }),
+  );
+}
+
+type Meal = {
+  idMeal: string;
+  strMeal: string;
+  strMealThumb: string | null;
+  strCategory: string | null;
+  strArea: string | null;
+  strInstructions: string | null;
+  strSource: string | null;
+  strYoutube: string | null;
+};
+
+async function mealIdeas(): Promise<Activity[]> {
+  const apiKey = process.env.THEMEALDB_API_KEY?.trim() || "1";
+  const url = new URL(
+    `/api/json/v1/${encodeURIComponent(apiKey)}/random.php`,
+    "https://www.themealdb.com",
+  );
+  const result = await externalJson<{ meals?: Meal[] | null }>(url, "TheMealDB");
+  const meal = result.meals?.[0];
+  if (!meal) return [];
+  const instructions = meal.strInstructions?.trim() || "";
+
+  const idea: Activity = {
+    id: `themealdb-${meal.idMeal}`,
+    title: meal.strMeal,
+    subtitle: [meal.strCategory, meal.strArea]
+      .filter(Boolean)
+      .join(" · ") || "Recipe for two",
+    description: instructions
+      ? `${instructions.slice(0, 220).trim()}${instructions.length > 220 ? "…" : ""}`
+      : "Pick up the ingredients beforehand, then follow the recipe together over a call and enjoy dinner at the same time.",
+    minutes: 90,
+    kind: "meal",
+    source: "themealdb",
+    poster: meal.strMealThumb || undefined,
+    url: meal.strSource || meal.strYoutube || undefined,
+  };
+  return [idea];
+}
+
 export async function suggest(room: Room, busy: Slot[], demo: boolean) {
   const max = Math.min(...room.profiles.map((p) => p.duration));
-  const activities: Activity[] = [...curated];
-  let notice = "";
-  if (process.env.TMDB_READ_ACCESS_TOKEN) {
-    try {
-      activities.unshift(...(await movies(room)));
-    } catch (error) {
-      notice =
-        (error as Error).message + " Showing curated activities instead.";
-    }
-  } else if (demo && max >= 100) {
-    activities.unshift({
-      id: "demo-movie",
-      title: "A little movie magic",
-      subtitle: "Sample movie-night activity",
-      description:
-        "Pick a feel-good favorite you both have access to, bring your favorite snacks, and press play together. Live movie picks appear after TMDB is configured.",
-      minutes: 100,
-      kind: "movie",
-      source: "demo",
-    });
-  } else notice = "TMDB is not configured. Showing curated activities.";
+  const notices: string[] = [];
+  const hasTmdbToken = Boolean(process.env.TMDB_READ_ACCESS_TOKEN);
+  const sampleMovie: Activity = {
+    id: "demo-movie",
+    title: "A little movie magic",
+    subtitle: "Sample movie-night activity",
+    description:
+      "Pick a feel-good favorite you both have access to, bring your favorite snacks, and press play together. Live movie picks appear after TMDB is configured.",
+    minutes: 100,
+    kind: "movie",
+    source: "demo",
+  };
+  const movieRequest = hasTmdbToken
+    ? movies(room)
+    : Promise.resolve(demo && max >= sampleMovie.minutes ? [sampleMovie] : []);
+  const gameRequest = process.env.RAWG_API_KEY
+    ? games()
+    : Promise.resolve([] as Activity[]);
+  const [movieResult, gameResult, recipeResult] = await Promise.allSettled([
+    movieRequest,
+    gameRequest,
+    mealIdeas(),
+  ]);
+
+  const movieIdeas = movieResult.status === "fulfilled" ? movieResult.value : [];
+  const gameIdeas = gameResult.status === "fulfilled" ? gameResult.value : [];
+  const recipeIdeas =
+    recipeResult.status === "fulfilled" ? recipeResult.value : [];
+
+  if (movieResult.status === "rejected")
+    notices.push(
+      movieResult.reason instanceof Error
+        ? movieResult.reason.message
+        : "TMDB suggestions are unavailable.",
+    );
+  if (!hasTmdbToken && !(demo && max >= sampleMovie.minutes)) {
+    notices.push("TMDB is not configured; live movie picks are unavailable.");
+  }
+  if (gameResult.status === "rejected")
+    notices.push(
+      gameResult.reason instanceof Error
+        ? gameResult.reason.message
+        : "RAWG suggestions are unavailable.",
+    );
+  if (!process.env.RAWG_API_KEY)
+    notices.push("Add RAWG_API_KEY in backend/.env to enable game picks.");
+  if (recipeResult.status === "rejected")
+    notices.push(
+      recipeResult.reason instanceof Error
+        ? recipeResult.reason.message
+        : "TheMealDB suggestions are unavailable.",
+    );
+
+  const featured = [movieIdeas[0], gameIdeas[0], recipeIdeas[0]].filter(
+    (activity): activity is Activity => Boolean(activity),
+  );
+  const activities: Activity[] = [
+    ...featured,
+    ...curated,
+    ...movieIdeas.slice(1),
+    ...gameIdeas.slice(1),
+    ...recipeIdeas.slice(1),
+  ];
   const blocked = [
     ...busy,
     ...room.plans.filter((p) => p.status !== "cancelled").map((p) => p.slot),
@@ -151,5 +292,5 @@ export async function suggest(room: Room, busy: Slot[], demo: boolean) {
     if (slot) offers.push({ id: randomUUID(), slot, activity });
     if (offers.length === 3) break;
   }
-  return { offers, slots, notice };
+  return { offers, slots, notice: notices.join(" ") };
 }

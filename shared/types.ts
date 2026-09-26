@@ -16,9 +16,9 @@ export type Activity = {
   subtitle: string;
   description: string;
   minutes: number;
-  kind: "movie" | "conversation" | "creative";
+  kind: "movie" | "game" | "meal" | "conversation" | "creative";
   poster?: string;
-  source: "curated" | "tmdb" | "demo";
+  source: "curated" | "tmdb" | "rawg" | "themealdb" | "demo";
   url?: string;
 };
 export type Slot = { start: string; end: string };
@@ -41,11 +41,15 @@ export type AppState = {
   room: Room | null;
   calendarReady: boolean;
   tmdbReady: boolean;
+  rawgReady: boolean;
+  mealdbReady: boolean;
 };
 export type Config = {
   mode: "demo" | "live";
   supabaseUrl: string;
-  supabaseAnonKey: string;
+  supabasePublishableKey: string;
   calendarReady: boolean;
   tmdbReady: boolean;
+  rawgReady: boolean;
+  mealdbReady: boolean;
 };

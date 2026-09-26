@@ -6,7 +6,13 @@ import { z, ZodError } from "zod";
 import { DateTime } from "luxon";
 import { timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { live, origin, calendarReady } from "./config.ts";
+import {
+  live,
+  origin,
+  calendarReady,
+  rawgReady,
+  mealdbReady,
+} from "./config.ts";
 import {
   admin,
   newDemoUser,
@@ -42,6 +48,8 @@ app.use(
           "'self'",
           "https://image.tmdb.org",
           "https://www.themoviedb.org",
+          "https://media.rawg.io",
+          "https://www.themealdb.com",
           "data:",
         ],
         "style-src": [
@@ -84,9 +92,11 @@ app.get("/api/config", (_req, res) =>
   res.json({
     mode: live ? "live" : "demo",
     supabaseUrl: live ? process.env.SUPABASE_URL : "",
-    supabaseAnonKey: live ? process.env.SUPABASE_ANON_KEY : "",
+    supabasePublishableKey: live ? process.env.SUPABASE_PUBLISHABLE_KEY : "",
     calendarReady,
     tmdbReady: Boolean(process.env.TMDB_READ_ACCESS_TOKEN),
+    rawgReady,
+    mealdbReady,
   }),
 );
 app.post("/api/demo/session", async (_req, res) => {
@@ -157,6 +167,8 @@ app.get("/api/state", async (_req, res) =>
     room: await getRoom(res.locals.userId),
     calendarReady,
     tmdbReady: Boolean(process.env.TMDB_READ_ACCESS_TOKEN),
+    rawgReady,
+    mealdbReady,
   }),
 );
 const readProfile = (req: Request, id: string) => ({

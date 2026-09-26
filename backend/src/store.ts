@@ -8,7 +8,7 @@ import type { Room, Profile } from "../../shared/types.ts";
 export const admin = live
   ? createClient(
       process.env.SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      process.env.SUPABASE_SECRET_KEY!,
       { auth: { persistSession: false, autoRefreshToken: false } },
     )
   : null;

@@ -10,6 +10,7 @@ import {
   Clock3,
   Copy,
   Film,
+  Gamepad2,
   Globe2,
   Heart,
   House,
@@ -21,6 +22,7 @@ import {
   Settings2,
   Sparkles,
   Sun,
+  Utensils,
   Unplug,
   Users,
   X,
@@ -444,9 +446,13 @@ function ActivityCard({
   const Icon =
     activity.kind === "movie"
       ? Film
-      : activity.kind === "creative"
-        ? Camera
-        : MessageCircle;
+      : activity.kind === "game"
+        ? Gamepad2
+        : activity.kind === "meal"
+          ? Utensils
+          : activity.kind === "creative"
+            ? Camera
+            : MessageCircle;
   return (
     <motion.article
       layout
@@ -471,9 +477,13 @@ function ActivityCard({
             <span className="art-mark">
               {activity.kind === "movie"
                 ? "JUST PRESS PLAY"
-                : activity.kind === "creative"
-                  ? "A LITTLE CLOSER"
-                  : "GOOD COMPANY"}
+                : activity.kind === "game"
+                  ? "CO-OP, TOGETHER"
+                  : activity.kind === "meal"
+                    ? "COOK SOMETHING TOGETHER"
+                    : activity.kind === "creative"
+                      ? "A LITTLE CLOSER"
+                      : "GOOD COMPANY"}
             </span>
           </>
         )}
@@ -481,9 +491,13 @@ function ActivityCard({
           <Icon size={12} />
           {activity.kind === "movie"
             ? "Movie night"
-            : activity.kind === "creative"
-              ? "Something different"
-              : "Quality time"}
+            : activity.kind === "game"
+              ? "Game night"
+              : activity.kind === "meal"
+                ? "Cook together"
+                : activity.kind === "creative"
+                  ? "Something different"
+                  : "Quality time"}
         </span>
       </div>
       <div className="activity-body">
@@ -496,11 +510,29 @@ function ActivityCard({
               ? "Demo idea"
               : activity.source === "tmdb"
                 ? "TMDB pick"
-                : "Made for two"}
+                : activity.source === "rawg"
+                  ? "RAWG pick"
+                  : activity.source === "themealdb"
+                    ? "TheMealDB recipe"
+                    : "Made for two"}
           </span>
         </div>
         <h3>{activity.title}</h3>
         <p>{activity.description}</p>
+        {activity.url && (
+          <a
+            className="activity-link"
+            href={activity.url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {activity.kind === "meal"
+              ? "Open recipe"
+              : activity.kind === "game"
+                ? "View on RAWG"
+                : "Movie details"}
+          </a>
+        )}
         <div className="offer-time">
           <CalendarDays size={14} />
           {localDate(offer.slot.start, me.timezone)} ·{" "}
@@ -1779,6 +1811,42 @@ function App() {
                 className={`pill ${config?.tmdbReady ? "green" : "neutral"}`}
               >
                 {config?.tmdbReady ? "READY" : "SETUP"}
+              </span>
+            </div>
+            <div className="connection-item">
+              <div className="connection-icon">
+                <Gamepad2 size={21} />
+              </div>
+              <div>
+                <h3>RAWG</h3>
+                <p>
+                  {config?.rawgReady
+                    ? "Online co-op game suggestions are available."
+                    : "Add RAWG_API_KEY to backend/.env for game suggestions."}
+                </p>
+              </div>
+              <span
+                className={`pill ${config?.rawgReady ? "green" : "neutral"}`}
+              >
+                {config?.rawgReady ? "READY" : "SETUP"}
+              </span>
+            </div>
+            <div className="connection-item">
+              <div className="connection-icon">
+                <Utensils size={21} />
+              </div>
+              <div>
+                <h3>TheMealDB</h3>
+                <p>
+                  {config?.mealdbReady
+                    ? "Recipe suggestions use the free test key unless you configure a supporter key."
+                    : "Recipe suggestions are unavailable right now."}
+                </p>
+              </div>
+              <span
+                className={`pill ${config?.mealdbReady ? "green" : "neutral"}`}
+              >
+                {config?.mealdbReady ? "READY" : "SETUP"}
               </span>
             </div>
             <div className="credits">
