@@ -38,7 +38,7 @@ Use the generated hex value for `TOKEN_ENCRYPTION_KEY` and keep it stable. Repla
 
 ### 1. Supabase: accounts and plans
 
-- Run [`supabase/schema.sql`](supabase/schema.sql) once in your project's SQL Editor. It creates `rooms`, `memberships`, `calendar_tokens`, `oauth_states`, and two transactional pairing functions. Review existing table names before applying to a project that already has data.
+- Run [`supabase/schema.sql`](supabase/schema.sql) once in your project's SQL Editor. It creates `rooms`, `memberships`, `calendar_tokens`, `oauth_states`, and two transactional pairing functions. Also run [`supabase/pair_removal.sql`](supabase/pair_removal.sql) to install the pairing removal function and allow solo accounts to switch spaces. If you applied an earlier version of that file, run the updated one again. Review existing table names before applying to a project that already has data.
 - Set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY` in `backend/.env` from your project's **Connect** dialog or **Settings → API Keys**. The publishable key is sent to the browser for Supabase Auth; the secret key stays on the Express server and bypasses RLS, so never expose it in frontend code or a `VITE_` variable.
 - In **Authentication → URL Configuration**, set the Site URL to `http://localhost:5173` and allow `http://localhost:5173` as a redirect URL.
 - Enable email authentication. Sign-in uses emailed magic links with PKCE; open each link in the same browser that requested it.
@@ -46,6 +46,8 @@ Use the generated hex value for `TOKEN_ENCRYPTION_KEY` and keep it stable. Repla
 - Set `APP_MODE=live` and restart `npm run dev`. Create two actual accounts, then share a one-use invite code. Codes expire after 24 hours.
 
 Tables have RLS enabled and no browser access policies. All application data requests go through Express, which validates the Supabase access token, derives the user ID from that validated token, and checks membership before using its server-side database client. The secret key never reaches the browser. Invitations are stored as SHA-256 digests. Row locking and a unique user membership prevent double joins; optimistic version checks prevent concurrent acceptances from overwriting each other.
+
+Either partner can remove the pairing from **Connections** after two confirmation steps. This immediately deletes the shared room and plans, memberships, invite, encrypted Google Calendar tokens, and pending OAuth states from Supabase. Individual Supabase sign-in accounts are retained. Google authorization may need to be revoked separately in Google Account settings. After the pairing is removed, either account can join a different space with an invite code or create a new one.
 
 Partner state refreshes every 10 seconds. This draft uses polling, not Supabase Realtime.
 
@@ -110,12 +112,13 @@ backend/src/calendar.ts    Google OAuth, encrypted tokens, and free/busy reads
 backend/src/activities.ts  TMDB, RAWG, TheMealDB, and curated date ideas
 backend/test/              Unit and API integration tests
 supabase/schema.sql        Database setup and private access rules
+supabase/pair_removal.sql  Pair removal and solo-space replacement
 backend/.env.example       Required integration settings
 ```
 
 ## First-draft boundaries
 
-- One pair per account; unpairing/account deletion is not built yet.
+- One active pair per account. Either partner can remove the pairing; deleting it does not delete either Supabase sign-in account.
 - One daily availability window; overnight windows and per-day overrides are not built yet.
 - Slots are searched in 15-minute increments over the next seven days, with at least 15 minutes' lead time. UTC timestamps are converted using IANA time zones.
 - A suggestion records the proposer’s acceptance. Both partners must accept before it is saved. Either partner may cancel it.

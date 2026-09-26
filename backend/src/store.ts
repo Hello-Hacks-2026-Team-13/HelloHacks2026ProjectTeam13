@@ -6,11 +6,9 @@ import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import type { Room, Profile } from "../../shared/types.ts";
 export const admin = live
-  ? createClient(
-      process.env.SUPABASE_URL!,
-      process.env.SUPABASE_SECRET_KEY!,
-      { auth: { persistSession: false, autoRefreshToken: false } },
-    )
+  ? createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
   : null;
 export const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -106,14 +104,26 @@ export async function joinRoom(userId: string, code: string, profile: Profile) {
     });
     if (error) throw error;
   } else {
-    if (await getRoom(userId)) throw new Error("You already have a space.");
     const invite = demo.invites[hash(code)];
     if (
       !invite ||
       invite.expires < Date.now() ||
+      !demo.rooms[invite.roomId] ||
       demo.rooms[invite.roomId].profiles.length !== 1
     )
       throw new Error("That invite is invalid, expired, or already used.");
+    const current = Object.values(demo.rooms).find((r) =>
+      r.profiles.some((p) => p.id === userId),
+    );
+    if (current) {
+      if (current.profiles.length !== 1)
+        throw new Error("Remove your current pairing first.");
+      if (current.id === invite.roomId)
+        throw new Error("Use an invite from a different space.");
+      delete demo.rooms[current.id];
+      for (const [key, existing] of Object.entries(demo.invites))
+        if (existing.roomId === current.id) delete demo.invites[key];
+    }
     demo.rooms[invite.roomId].profiles.push(profile);
     delete demo.invites[hash(code)];
     await persist();
@@ -143,6 +153,23 @@ export async function rotateInvite(userId: string) {
     await persist();
   }
   return code;
+}
+export async function removePairing(userId: string) {
+  if (admin) {
+    const { error } = await admin.rpc("remove_pairing", { actor: userId });
+    if (error) throw error;
+    return;
+  }
+
+  const room = Object.values(demo.rooms).find((r) =>
+    r.profiles.some((p) => p.id === userId),
+  );
+  if (!room || room.profiles.length !== 2)
+    throw new Error("There is no active pairing to remove.");
+  delete demo.rooms[room.id];
+  for (const [key, invite] of Object.entries(demo.invites))
+    if (invite.roomId === room.id) delete demo.invites[key];
+  await persist();
 }
 export async function mutateRoom(
   userId: string,

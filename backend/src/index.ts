@@ -21,6 +21,7 @@ import {
   createRoom,
   joinRoom,
   rotateInvite,
+  removePairing,
   mutateRoom,
 } from "./store.ts";
 import {
@@ -192,6 +193,10 @@ app.post("/api/pair/join", async (req, res) => {
 app.post("/api/pair/invite", async (_req, res) =>
   res.json({ code: await rotateInvite(res.locals.userId) }),
 );
+app.post("/api/pair/remove", async (_req, res) => {
+  await removePairing(res.locals.userId);
+  res.json({ ok: true });
+});
 app.post("/api/demo/partner", async (_req, res) => {
   if (live) {
     res.sendStatus(404);

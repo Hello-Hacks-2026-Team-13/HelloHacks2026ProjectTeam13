@@ -144,10 +144,14 @@ function Modal({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
       if (e.key === "Tab") {
         const els = ref.current?.querySelectorAll<HTMLElement>(
           "button:not(:disabled),input,select,a[href]",
@@ -173,7 +177,7 @@ function Modal({
       document.body.style.overflow = old;
       previous?.focus();
     };
-  }, [onClose]);
+  }, []);
   return (
     <div
       className="modal-backdrop"
@@ -596,6 +600,12 @@ function App() {
     [searched, setSearched] = useState(false);
   const [invite, setInvite] = useState(""),
     [joinCode, setJoinCode] = useState(""),
+    [pairCode, setPairCode] = useState(""),
+    [pairName, setPairName] = useState(""),
+    [pairProfile, setPairProfile] = useState<Profile>(initialProfile),
+    [removalStep, setRemovalStep] = useState<0 | 1 | 2>(0),
+    [removalAcknowledged, setRemovalAcknowledged] = useState(false),
+    [removalConfirmation, setRemovalConfirmation] = useState(""),
     [name, setName] = useState(""),
     [email, setEmail] = useState(""),
     [emailSent, setEmailSent] = useState(false),
@@ -687,6 +697,41 @@ function App() {
         (p) => p.status === "saved" && Date.parse(p.slot.start) > Date.now(),
       )
       .sort((a, b) => Date.parse(a.slot.start) - Date.parse(b.slot.start))[0];
+  const openConnections = () => {
+    if (me) {
+      setPairProfile(me);
+      setPairName(me.name);
+    }
+    setRemovalStep(0);
+    setRemovalAcknowledged(false);
+    setRemovalConfirmation("");
+    setModal("connect");
+  };
+  const confirmPairRemoval = () =>
+    void action(async () => {
+      await api("/pair/remove", "POST");
+      setRemovalStep(0);
+      setRemovalAcknowledged(false);
+      setRemovalConfirmation("");
+      setPairCode("");
+    }, "Pairing removed. You can now join another space.");
+  const joinWithPairCode = () =>
+    void action(async () => {
+      await api("/pair/join", "POST", {
+        code: pairCode.trim(),
+        profile: { ...pairProfile, name: pairName.trim() },
+      });
+      setPairCode("");
+      setModal(null);
+    }, "You’re connected.");
+  const createPairing = () =>
+    void action(async () => {
+      const result = await api<{ code: string }>("/pair/create", "POST", {
+        profile: { ...pairProfile, name: pairName.trim() },
+      });
+      setInvite(result.code);
+      setModal("invite");
+    }, "Your new space is ready.");
   const findIdeas = () =>
     void action(async () => {
       const result = await api<{ offers: Offer[]; notice: string }>(
@@ -779,7 +824,7 @@ function App() {
             </p>
           </div>
           <div className="sidebar-bottom">
-            <button className="nav-link" onClick={() => setModal("connect")}>
+            <button className="nav-link" onClick={openConnections}>
               <Settings2 size={18} />
               Connections
             </button>
@@ -820,10 +865,7 @@ function App() {
                   day: "numeric",
                 }).format(now)}
               </span>
-              <button
-                className="mode-badge"
-                onClick={() => setModal("connect")}
-              >
+              <button className="mode-badge" onClick={openConnections}>
                 <span className="status-dot" />
                 {config?.mode === "live" ? "Private space" : "Demo mode"}
               </button>
@@ -888,8 +930,8 @@ function App() {
                 {emailSent && (
                   <p className="success-text" role="status">
                     Check your inbox for your secure sign-in link. Open it in
-                    this same browser and profile. If your email opens elsewhere,
-                    copy the link and paste it into this browser.
+                    this same browser and profile. If your email opens
+                    elsewhere, copy the link and paste it into this browser.
                   </p>
                 )}
               </section>
@@ -1737,6 +1779,202 @@ function App() {
                 ? "You’re in a local demo. Live accounts and calendars become available after project setup."
                 : "Connect what helps you make time for each other."}
             </p>
+            <section
+              className="connection-item pairing-item"
+              aria-label="Partner pairing"
+            >
+              <div className="connection-icon">
+                <Heart size={21} />
+              </div>
+              <div className="connection-pairing">
+                <h3>Partner pairing</h3>
+                {partner ? (
+                  <>
+                    <p>Paired with {partner.name}.</p>
+                    {removalStep === 1 ? (
+                      <div className="pairing-request-status">
+                        <p>
+                          Removing this pairing immediately removes both
+                          partners from the shared space. Shared plans, the
+                          invite, memberships, and stored calendar tokens are
+                          deleted from Supabase. Your individual sign-in
+                          accounts remain. Google access may need to be revoked
+                          separately.
+                        </p>
+                        <label className="checkbox-row">
+                          <input
+                            type="checkbox"
+                            checked={removalAcknowledged}
+                            onChange={(e) =>
+                              setRemovalAcknowledged(e.target.checked)
+                            }
+                          />
+                          I understand this removes the pairing for both of us
+                          and deletes its shared data.
+                        </label>
+                        <div className="button-row">
+                          <Button
+                            disabled={!removalAcknowledged}
+                            onClick={() => setRemovalStep(2)}
+                          >
+                            Continue
+                          </Button>
+                          <Button secondary onClick={() => setRemovalStep(0)}>
+                            Go back
+                          </Button>
+                        </div>
+                      </div>
+                    ) : removalStep === 2 ? (
+                      <div className="pairing-request-status">
+                        <p>
+                          To permanently remove the pairing, type{" "}
+                          <strong>REMOVE</strong> below.
+                        </p>
+                        <label>
+                          Type REMOVE to confirm
+                          <input
+                            value={removalConfirmation}
+                            onChange={(e) =>
+                              setRemovalConfirmation(e.target.value)
+                            }
+                            autoComplete="off"
+                          />
+                        </label>
+                        <div className="button-row">
+                          <Button
+                            disabled={
+                              busy ||
+                              removalConfirmation.trim().toUpperCase() !==
+                                "REMOVE"
+                            }
+                            onClick={confirmPairRemoval}
+                          >
+                            Permanently remove pairing
+                          </Button>
+                          <Button
+                            secondary
+                            onClick={() => {
+                              setRemovalStep(1);
+                              setRemovalConfirmation("");
+                            }}
+                          >
+                            Go back
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="pairing-request-status">
+                        <p>
+                          To change partners, enter the new partner’s invite
+                          code here. The code stays available so you can join
+                          after removing this pairing.
+                        </p>
+                        <label>
+                          New partner’s invite code
+                          <input
+                            value={pairCode}
+                            onChange={(e) =>
+                              setPairCode(e.target.value.trim().slice(0, 24))
+                            }
+                            minLength={24}
+                            maxLength={24}
+                            autoComplete="off"
+                            placeholder="Paste their 24-character code"
+                          />
+                        </label>
+                        <Button
+                          secondary
+                          disabled={busy}
+                          onClick={() => {
+                            setRemovalAcknowledged(false);
+                            setRemovalStep(1);
+                          }}
+                        >
+                          Remove or change partner
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                ) : room ? (
+                  <div className="pairing-request-status">
+                    <p>
+                      Your space is ready. Share an invite, or join another
+                      person’s space with their code.
+                    </p>
+                    <label>
+                      Invite code
+                      <input
+                        value={pairCode}
+                        onChange={(e) =>
+                          setPairCode(e.target.value.trim().slice(0, 24))
+                        }
+                        minLength={24}
+                        maxLength={24}
+                        autoComplete="off"
+                        placeholder="Enter a 24-character code"
+                      />
+                    </label>
+                    <Button
+                      disabled={busy || pairCode.trim().length !== 24}
+                      onClick={joinWithPairCode}
+                    >
+                      Join with invite code
+                    </Button>
+                    <Button
+                      secondary
+                      disabled={busy}
+                      onClick={() => setModal("invite")}
+                    >
+                      View or create your invite
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="pairing-request-status">
+                    <p>
+                      You’re not currently paired. Join someone with their
+                      invite code or create a new space.
+                    </p>
+                    <label>
+                      Your name
+                      <input
+                        value={pairName}
+                        onChange={(e) => setPairName(e.target.value)}
+                        maxLength={40}
+                        required
+                      />
+                    </label>
+                    <label>
+                      Invite code
+                      <input
+                        value={pairCode}
+                        onChange={(e) =>
+                          setPairCode(e.target.value.trim().slice(0, 24))
+                        }
+                        minLength={24}
+                        maxLength={24}
+                        autoComplete="off"
+                        placeholder="Enter a 24-character code"
+                      />
+                    </label>
+                    <div className="button-row">
+                      <Button
+                        disabled={busy || pairCode.trim().length !== 24}
+                        onClick={joinWithPairCode}
+                      >
+                        Join with code
+                      </Button>
+                      <Button
+                        secondary
+                        disabled={busy || !pairName.trim()}
+                        onClick={createPairing}
+                      >
+                        Create a space
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
             <div className="connection-item">
               <div className="connection-icon">
                 <Users size={21} />

@@ -1072,6 +1072,59 @@ footer > span:first-child {
   align-items: center;
   margin: 24px 0 16px;
 }
+.pairing-item {
+  align-items: flex-start;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #eee9dd;
+}
+.connection-pairing {
+  flex: 1;
+  min-width: 0;
+}
+.connection-pairing label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 13px 0;
+  color: #777463;
+  font-size: 11px;
+}
+.connection-pairing input:not([type="checkbox"]) {
+  width: 100%;
+  border: 1px solid #e5e1d8;
+  border-radius: 7px;
+  padding: 11px 12px;
+  background: #fffefa;
+  color: #33342f;
+  font-size: 12px;
+}
+.pairing-request-status {
+  margin-top: 12px;
+}
+.pairing-request-status > p {
+  color: #858273;
+  font-size: 11px;
+  line-height: 1.65;
+}
+.pairing-request-status .button {
+  margin: 7px 7px 0 0;
+}
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.checkbox-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start;
+  gap: 9px !important;
+  line-height: 1.55;
+}
+.checkbox-row input {
+  margin-top: 2px;
+}
 .connection-icon {
   background: #f2eee3;
   color: #9b8666;
