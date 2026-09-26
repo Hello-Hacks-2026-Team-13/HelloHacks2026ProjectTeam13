@@ -40,6 +40,7 @@ import type {
 import {
   api,
   initialize,
+  getAuthCallbackError,
   signedIn,
   watchAuth,
   signIn,
@@ -612,6 +613,8 @@ function App() {
       .then(async (c) => {
         if (!active) return;
         setConfig(c);
+        const callbackError = getAuthCallbackError();
+        if (callbackError) setError(callbackError);
         const auth = await signedIn();
         setAuthenticated(auth);
         if (auth) await refresh();
@@ -885,7 +888,8 @@ function App() {
                 {emailSent && (
                   <p className="success-text" role="status">
                     Check your inbox for your secure sign-in link. Open it in
-                    this browser.
+                    this same browser and profile. If your email opens elsewhere,
+                    copy the link and paste it into this browser.
                   </p>
                 )}
               </section>

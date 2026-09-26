@@ -3,6 +3,10 @@ import type { Config } from "../../../shared/types";
 let supabase: SupabaseClient | null = null;
 let demoToken = localStorage.getItem("across-demo-session") || "";
 let initialization: Promise<Config> | undefined;
+let authCallbackError: string | null = null;
+export function getAuthCallbackError() {
+  return authCallbackError;
+}
 export function initialize(): Promise<Config> {
   return (initialization ??= initializeOnce());
 }
@@ -14,12 +18,39 @@ async function initializeOnce(): Promise<Config> {
     );
   const config = (await response.json()) as Config;
   if (config.mode === "live") {
+    const callbackUrl = new URL(window.location.href);
+    const hasCode = callbackUrl.searchParams.has("code");
+    const hasCallbackError =
+      callbackUrl.searchParams.has("error") ||
+      new URLSearchParams(callbackUrl.hash.slice(1)).has("error");
     const { createClient } = await import("@supabase/supabase-js");
     supabase = createClient(
       config.supabaseUrl,
       config.supabasePublishableKey,
       { auth: { flowType: "pkce" } },
     );
+    // Await the SDK's automatic exchange; exchanging the code again would
+    // consume a single-use link twice. Without a local PKCE verifier the SDK
+    // skips the exchange, leaving the code in the URL without reporting error.
+    const { error } = await supabase.auth.initialize();
+    if (hasCode || hasCallbackError) {
+      if (
+        error ||
+        hasCallbackError ||
+        (hasCode && new URL(window.location.href).searchParams.has("code"))
+      ) {
+        authCallbackError =
+          "This sign-in link could not be completed. Request a new link below, then open the newest email link in the same browser and profile. If you requested it in Codex, copy the email link into Codex's browser, or start again in Chrome. Links can also expire or have already been used.";
+      }
+      const cleanUrl = new URL(window.location.href);
+      for (const key of ["code", "error", "error_code", "error_description"]) {
+        cleanUrl.searchParams.delete(key);
+      }
+      if (new URLSearchParams(cleanUrl.hash.slice(1)).has("error")) {
+        cleanUrl.hash = "";
+      }
+      window.history.replaceState(window.history.state, "", cleanUrl);
+    }
   } else if (!demoToken) {
     const response = await fetch("/api/demo/session", { method: "POST" });
     if (!response.ok)
