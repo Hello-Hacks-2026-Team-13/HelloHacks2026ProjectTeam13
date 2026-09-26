@@ -713,7 +713,6 @@ function App() {
       setRemovalStep(0);
       setRemovalAcknowledged(false);
       setRemovalConfirmation("");
-      setPairCode("");
     }, "Pairing removed. You can now join another space.");
   const joinWithPairCode = () =>
     void action(async () => {
