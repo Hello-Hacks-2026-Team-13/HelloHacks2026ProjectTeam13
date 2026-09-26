@@ -1,6 +1,18 @@
 # HelloHacks2026ProjectTeam13
 
-A small full-stack starter with an Express API and a React + TypeScript web app.
+A full-stack starter for a long-distance relationship helper, with an Express API and a React + TypeScript web app.
+
+## Project idea
+
+Help long-distance couples find things to do together, even when their schedules or time zones do not line up.
+
+Possible features and integrations:
+
+- Compare schedules to find times when both people are available; potentially integrate Google Calendar.
+- Account for different time zones.
+- Suggest activities by category, such as movies, games, and recipes. Potential data sources include TMDb, TheMealDB, and RAWG.
+- Use schedules and preferences to suggest ideas when users do not know what to choose, potentially with an LLM.
+- Offer asynchronous activities for times without overlap, such as sending a photo or responding to a prompt.
 
 ## What each part does
 
