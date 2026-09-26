@@ -1,0 +1,160 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { once } from "node:events";
+import { defaultProfile } from "../src/domain.ts";
+
+test("API: real pairing, private reads, three suggestions, two votes, cancellation and persistence", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "across-test-"));
+  const port = 33000 + Math.floor(Math.random() * 10000);
+  let server: ReturnType<typeof spawn>;
+  async function start() {
+    server = spawn(process.execPath, ["--import", "tsx", "src/index.ts"], {
+      cwd: new URL("../", import.meta.url),
+      env: {
+        ...process.env,
+        PORT: String(port),
+        APP_MODE: "demo",
+        NODE_ENV: "test",
+        DEMO_DATA_DIR: dir,
+        TMDB_READ_ACCESS_TOKEN: "",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(
+        () => reject(new Error("Test server did not start")),
+        10000,
+      );
+      server.stdout?.on("data", (chunk) => {
+        if (chunk.toString().includes("Across API")) {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+      server.once("exit", (code) => {
+        clearTimeout(timeout);
+        reject(new Error(`Test server exited: ${code}`));
+      });
+      server.stderr?.on("data", (chunk) => {
+        if (chunk.toString().includes("Error")) {
+          clearTimeout(timeout);
+          reject(new Error(chunk.toString()));
+        }
+      });
+    });
+  }
+  async function stop() {
+    if (server.exitCode === null) {
+      server.kill();
+      await once(server, "exit");
+    }
+  }
+  async function call(
+    path: string,
+    token = "",
+    method = "GET",
+    body?: unknown,
+  ) {
+    const response = await fetch(`http://127.0.0.1:${port}/api${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { status: response.status, data: await response.json() };
+  }
+  try {
+    await start();
+    assert.equal((await call("/state")).status, 401);
+    const a = (await call("/demo/session", "", "POST")).data.token,
+      b = (await call("/demo/session", "", "POST")).data.token,
+      c = (await call("/demo/session", "", "POST")).data.token;
+    const profile = {
+      ...defaultProfile(a, "Test A"),
+      timezone: "UTC",
+      startHour: 0,
+      endHour: 24,
+      duration: 120,
+    };
+    const created = await call("/pair/create", a, "POST", { profile });
+    assert.equal(created.status, 200);
+    assert.equal(
+      (
+        await call("/pair/join", b, "POST", {
+          code: created.data.code,
+          profile: { ...profile, id: b, name: "Test B" },
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await call("/pair/join", c, "POST", {
+          code: created.data.code,
+          profile,
+        })
+      ).status,
+      409,
+    );
+    assert.equal((await call("/state", c)).data.room, null);
+    assert.equal((await call("/state", b)).data.room.profiles.length, 2);
+    const ideas = await call("/suggestions", a, "POST");
+    assert.equal(ideas.data.offers.length, 3);
+    const id = ideas.data.offers[0].id;
+    assert.equal(
+      (await call("/plans", a, "POST", { offerId: id })).status,
+      200,
+    );
+    assert.equal(
+      (await call("/state", b)).data.room.plans[0].status,
+      "pending",
+    );
+    assert.equal((await call(`/plans/${id}/accept`, c, "POST")).status, 409);
+    assert.equal((await call(`/plans/${id}/accept`, a, "POST")).status, 200);
+    assert.equal(
+      (await call("/state", a)).data.room.plans[0].status,
+      "pending",
+    );
+    await Promise.all([
+      call(`/plans/${id}/accept`, b, "POST"),
+      call(`/plans/${id}/accept`, b, "POST"),
+    ]);
+    let plan = (await call("/state", a)).data.room.plans[0];
+    assert.equal(plan.status, "saved");
+    assert.equal(plan.acceptedBy.length, 2);
+    await stop();
+    await start();
+    plan = (await call("/state", b)).data.room.plans[0];
+    assert.equal(plan.status, "saved");
+    assert.equal((await call(`/plans/${id}/cancel`, b, "POST")).status, 200);
+    assert.equal((await call(`/plans/${id}/accept`, a, "POST")).status, 409);
+    await call("/preferences", a, "PUT", {
+      profile: { ...profile, duration: 30 },
+    });
+    const shortIdeas = (await call("/suggestions", a, "POST")).data.offers;
+    assert.equal(shortIdeas.length, 3);
+    assert.ok(
+      shortIdeas.every(
+        (offer: { activity: { minutes: number } }) =>
+          offer.activity.minutes <= 30,
+      ),
+    );
+    assert.equal(
+      (
+        await call("/preferences", a, "PUT", {
+          profile: { ...profile, timezone: "Mars/Olympus" },
+        })
+      ).status,
+      400,
+    );
+  } finally {
+    await stop();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
