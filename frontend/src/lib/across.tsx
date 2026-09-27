@@ -2,6 +2,7 @@ import "react-native-url-polyfill/auto";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import Constants from "expo-constants";
 import * as Linking from "expo-linking";
 import {
   createContext,
@@ -16,8 +17,32 @@ import { AppState, Platform } from "react-native";
 
 import type { AppState as AcrossState, Config } from "../../../shared/types";
 
+function getDefaultApiUrl() {
+  if (Platform.OS !== "web") {
+    const hostUri = Constants.expoConfig?.hostUri;
+    if (hostUri) {
+      try {
+        const host = new URL(`http://${hostUri}`).hostname;
+        return `http://${host}:3001`;
+      } catch {
+        // Fall back to localhost if Expo provides an invalid development host.
+      }
+    }
+  }
+  return "http://localhost:3001";
+}
+
+const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+const configuredHost = configuredApiUrl
+  ? new URL(configuredApiUrl).hostname
+  : "";
+const configuredUrlPointsToThisDevice =
+  Platform.OS !== "web" &&
+  ["localhost", "127.0.0.1", "[::1]"].includes(configuredHost);
 const API_URL = (
-  process.env.EXPO_PUBLIC_API_URL || "http://localhost:3001"
+  configuredUrlPointsToThisDevice
+    ? getDefaultApiUrl()
+    : configuredApiUrl || getDefaultApiUrl()
 ).replace(/\/$/, "");
 const DEMO_TOKEN_KEY = "across-demo-session";
 const nativeClientHeader: Record<string, string> =
@@ -28,8 +53,18 @@ let demoToken = "";
 let mode: Config["mode"] = "demo";
 let configPromise: Promise<Config> | undefined;
 
+async function fetchApi(url: string, options?: RequestInit) {
+  try {
+    return await fetch(url, options);
+  } catch {
+    throw new Error(
+      `Can't connect to Across at ${API_URL}. Start the app with "npm run dev" from the project root. For a phone, keep it on the same Wi-Fi as your computer.`,
+    );
+  }
+}
+
 async function initializeClient(): Promise<Config> {
-  const response = await fetch(`${API_URL}/api/config`, {
+  const response = await fetchApi(`${API_URL}/api/config`, {
     headers: nativeClientHeader,
   });
   if (!response.ok) {
@@ -53,7 +88,7 @@ async function initializeClient(): Promise<Config> {
   } else {
     demoToken = (await AsyncStorage.getItem(DEMO_TOKEN_KEY)) || "";
     if (!demoToken) {
-      const sessionResponse = await fetch(`${API_URL}/api/demo/session`, {
+      const sessionResponse = await fetchApi(`${API_URL}/api/demo/session`, {
         method: "POST",
         headers: nativeClientHeader,
       });
@@ -67,7 +102,13 @@ async function initializeClient(): Promise<Config> {
 }
 
 export function initializeAcross() {
-  return (configPromise ??= initializeClient());
+  if (!configPromise) {
+    configPromise = initializeClient().catch((error: unknown) => {
+      configPromise = undefined;
+      throw error;
+    });
+  }
+  return configPromise;
 }
 
 function currentToken() {
@@ -104,7 +145,7 @@ async function acrossRequest<T>(
 ): Promise<T> {
   let token = demoToken;
   if (client) token = (await currentToken())?.data.session?.access_token || "";
-  const response = await fetch(`${API_URL}/api${path}`, {
+  const response = await fetchApi(`${API_URL}/api${path}`, {
     method,
     credentials: "include",
     headers: {

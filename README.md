@@ -15,7 +15,7 @@ npm run dev
 
 Expo starts the backend and frontend together. Open the Expo URL printed in the terminal, press `w` for the web app, or scan the QR code with Expo Go. The local web URL is usually <http://localhost:8081>; the API runs on port 3001. No provider credentials are needed for the demo.
 
-For a physical phone, copy `frontend/.env.example` to `frontend/.env` and set `EXPO_PUBLIC_API_URL` to your computer's LAN address, such as `http://192.168.1.42:3001`. Keep the phone and computer on the same network. The backend binds to the local network in development; your firewall may ask whether to allow Node.js.
+On a physical phone, the app uses the Expo development server's host to reach the API. Keep the phone and computer on the same network. If that address is unreachable, copy `frontend/.env.example` to `frontend/.env` and set `EXPO_PUBLIC_API_URL` to your computer's LAN address, such as `http://192.168.1.42:3001`. The backend binds to the local network in development; your firewall may ask whether to allow Node.js.
 
 1. Enter a name and create a space.
 2. Choose **Add demo partner** from the home screen or Connections, or join with the invite code from another client.
