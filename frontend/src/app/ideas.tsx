@@ -124,7 +124,7 @@ export default function IdeasScreen() {
               <Heading>
                 {offers.length
                   ? "No ideas in this category yet."
-                  : "Find your first three ideas."}
+                  : "Get ideas"}
               </Heading>
               <Body>
                 {offers.length
