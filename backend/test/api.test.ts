@@ -191,7 +191,24 @@ test("API: real pairing, private reads, three suggestions, two votes, cancellati
     // Daily moments: real authenticated routes and real image storage.
     const daily = await call("/moments", a);
     assert.equal(daily.status, 200);
-    const round = daily.data.rounds[0];
+    assert.equal(daily.data.rounds[0].prompt, null);
+    assert.equal(daily.data.rounds[0].promptReleased, false);
+    assert.equal(
+      (await call("/moments/settings", a, "PUT", { revealTime: "25:00" }))
+        .status,
+      400,
+    );
+    const nextReveal = new Date(Date.now() + 18 * 3600000);
+    const configuredTime = `${String(nextReveal.getUTCHours()).padStart(2, "0")}:${String(nextReveal.getUTCMinutes()).padStart(2, "0")}`;
+    const configured = await call("/moments/settings", a, "PUT", {
+      revealTime: configuredTime,
+    });
+    assert.equal(configured.status, 200);
+    assert.equal(configured.data.revealTime, configuredTime);
+    const round = configured.data.rounds.find(
+      (candidate: { revealAt: string }) => Date.parse(candidate.revealAt) > Date.now(),
+    );
+    assert.ok(round);
     const photo = (
       await sharp({
         create: { width: 8, height: 8, channels: 3, background: "#cb6554" },
@@ -209,10 +226,22 @@ test("API: real pairing, private reads, three suggestions, two votes, cancellati
         body: content,
       });
     assert.equal((await upload(c)).status, 409);
+    assert.equal((await upload(a)).status, 409); // prompt is still locked
     assert.equal(
       (await upload(a, Buffer.from("not an image").toString("base64"))).status,
       409,
     );
+    await stop();
+    const scheduleSaved = JSON.parse(
+      await readFile(join(dir, "demo.json"), "utf8"),
+    );
+    const roomWithMoment = Object.values(scheduleSaved.rooms)[0] as any;
+    const roundToRelease = roomWithMoment.moments.rounds.find(
+      (entry: { id: string }) => entry.id === round.id,
+    );
+    roundToRelease.promptAt = new Date(Date.now() - 1000).toISOString();
+    await writeFile(join(dir, "demo.json"), JSON.stringify(scheduleSaved));
+    await start();
     assert.equal((await upload(a)).status, 200);
     assert.equal((await upload(a)).status, 200); // replacement leaves one object
     assert.equal((await readdir(join(dir, "moments"))).length, 1);

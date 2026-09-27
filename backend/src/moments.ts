@@ -10,6 +10,7 @@ import {
   activeRound,
   requireUpload,
   canReadPhoto,
+  setMomentRevealTime,
 } from "./moment-domain.ts";
 import {
   saveMomentFile,
@@ -37,6 +38,18 @@ router.get("/", async (_req, res) => {
     });
   }
   res.json(momentsView(room, userId));
+});
+router.put("/settings", async (req, res) => {
+  const { revealTime } = z
+    .object({ revealTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/) })
+    .parse(req.body);
+  const room = await mutateRoom(res.locals.userId, (current) => {
+    if (current.profiles.length !== 2)
+      throw new Error("Pair with your partner to change the reveal time.");
+    prepareMoments(current);
+    setMomentRevealTime(current, revealTime);
+  });
+  res.json(momentsView(room, res.locals.userId));
 });
 router.put(
   "/:round/photo",

@@ -42,6 +42,7 @@ export default function MomentScreen() {
 function MomentContent() {
   const { state, authenticated, busy, execute, error, notice } = useAcross();
   const [data, setData] = useState<MomentsView | null>(null);
+  const [revealTimeDraft, setRevealTimeDraft] = useState<string | null>(null);
   const [problem, setProblem] = useState("");
   const [picking, setPicking] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -57,6 +58,21 @@ function MomentContent() {
     setData(next);
     setProblem("");
   }, []);
+  const revealTime = revealTimeDraft ?? data?.revealTime ?? "";
+  const saveRevealTime = () => {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(revealTime)) {
+      setProblem("Enter a reveal time in 24-hour format, such as 21:00.");
+      return;
+    }
+    void execute(async () => {
+      const next = await acrossApi<MomentsView>("/moments/settings", "PUT", {
+        revealTime,
+      });
+      setData(next);
+      setOffset(Date.parse(next.serverNow) - Date.now());
+      setRevealTimeDraft(null);
+    }, "Daily reveal time saved.");
+  };
   useEffect(() => {
     if (!paired) return;
     let active = true;
@@ -178,53 +194,102 @@ function MomentContent() {
               Try again
             </Button>
           ) : null}
+          {data ? (
+            <Card>
+              <Heading detail="The daily prompt opens 12 hours before the photos reveal.">
+                Daily photo reveal time
+              </Heading>
+              <Field
+                label={`Reveal time in ${formatTimezone(data.zone)} (24-hour)`}
+                value={revealTime}
+                onChangeText={setRevealTimeDraft}
+                placeholder="21:00"
+                maxLength={5}
+                accessibilityHint="Enter the daily photo reveal time in 24-hour HH:MM format."
+              />
+              <Body>
+                A prompt that has already opened keeps its scheduled reveal
+                time. Changes apply to the next unopened prompt.
+              </Body>
+              <Button
+                busy={busy}
+                disabled={revealTime === data.revealTime}
+                onPress={saveRevealTime}
+              >
+                Save reveal time
+              </Button>
+            </Card>
+          ) : null}
           {current ? (
             <Card>
               <View style={styles.prompt}>
-                <Text style={styles.eyebrow}>TODAY’S PROMPT</Text>
-                <Text accessibilityRole="header" style={styles.promptText}>
-                  {current.prompt}
+                <Text style={styles.eyebrow}>
+                  {current.promptReleased ? "TODAY’S PROMPT" : "NEXT PROMPT"}
                 </Text>
+                {current.promptReleased ? (
+                  <Text accessibilityRole="header" style={styles.promptText}>
+                    {current.prompt}
+                  </Text>
+                ) : (
+                  <Text style={styles.promptText}>
+                    Your next prompt opens in{" "}
+                    {remaining(Date.parse(current.promptAt) - serverNow)}.
+                  </Text>
+                )}
               </View>
               <Text style={styles.countdown}>
-                Reveals in {remaining(Date.parse(current.revealAt) - serverNow)}
+                Photo reveal in{" "}
+                {remaining(Date.parse(current.revealAt) - serverNow)}
               </Text>
               <Body>
                 {localTime(current.revealAt, me?.timezone)} for you{"\n"}
                 {localTime(current.revealAt, partner?.timezone)} for{" "}
                 {partner?.name}
               </Body>
-              <View style={styles.statusRow}>
-                {current.photos.map((photo) => (
-                  <Text key={photo.userId} style={styles.status}>
-                    {photo.name}:{" "}
-                    {photo.submitted ? "photo ready ✓" : "not yet"}
-                  </Text>
-                ))}
-              </View>
-              {mine?.submitted ? (
-                <MomentImage key={mine.revision} round={current} photo={mine} />
+              {current.promptReleased ? (
+                <>
+                  <View style={styles.statusRow}>
+                    {current.photos.map((photo) => (
+                      <Text key={photo.userId} style={styles.status}>
+                        {photo.name}: {" "}
+                        {photo.submitted ? "photo ready ✓" : "not yet"}
+                      </Text>
+                    ))}
+                  </View>
+                  {mine?.submitted ? (
+                    <MomentImage
+                      key={mine.revision}
+                      round={current}
+                      photo={mine}
+                    />
+                  ) : (
+                    <View style={styles.empty}>
+                      <Text style={styles.emptyIcon}>◌</Text>
+                      <Body>Your little piece of today goes here.</Body>
+                    </View>
+                  )}
+                  <Button
+                    busy={busy || picking}
+                    onPress={() => void pick(false)}
+                  >
+                    {mine?.submitted ? "Replace my photo" : "Choose a photo"}
+                  </Button>
+                  <Button
+                    kind="secondary"
+                    disabled={busy || picking}
+                    onPress={() => void pick(true)}
+                  >
+                    Take a photo
+                  </Button>
+                  <Body>
+                    One photo each, up to 5 MB. You can replace yours until the
+                    reveal. Your partner’s photo stays hidden, even if you both
+                    finish early.
+                  </Body>
+                </>
               ) : (
-                <View style={styles.empty}>
-                  <Text style={styles.emptyIcon}>◌</Text>
-                  <Body>Your little piece of today goes here.</Body>
-                </View>
+                <Body>Photo submissions open when the prompt is released.</Body>
               )}
-              <Button busy={busy || picking} onPress={() => void pick(false)}>
-                {mine?.submitted ? "Replace my photo" : "Choose a photo"}
-              </Button>
-              <Button
-                kind="secondary"
-                disabled={busy || picking}
-                onPress={() => void pick(true)}
-              >
-                Take a photo
-              </Button>
-              <Body>
-                One photo each, up to 5 MB. You can replace yours until the
-                reveal. Your partner’s photo stays hidden, even if you both
-                finish early.
-              </Body>
             </Card>
           ) : data ? (
             <Card>
@@ -273,12 +338,12 @@ function MomentContent() {
           <Card>
             <Heading>A moment, not an archive</Heading>
             <Body>
-              Photos reveal at 9 pm in{" "}
+              Photos reveal daily at {data?.revealTime || "your set time"} in{" "}
               {data?.zone
                 ? formatTimezone(data.zone)
-                : "the earlier partner’s timezone"}. You have 24
-              hours to view and react while the next prompt runs. Photos and
-              messages then disappear and are automatically deleted. Saving a
+                : "your shared timezone"}. The prompt opens 12 hours before
+              each reveal. Revealed photos and reactions stay available for 24
+              hours, then disappear and are automatically deleted. Saving a
               photo outside Across is outside this timer.
             </Body>
           </Card>

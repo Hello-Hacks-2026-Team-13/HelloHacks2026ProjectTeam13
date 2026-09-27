@@ -33,6 +33,7 @@ export type MomentReaction = { userId: string; emoji: string; message: string };
 export type MomentRound = {
   id: string;
   prompt: string;
+  promptAt?: string;
   revealAt: string;
   expiresAt: string;
   photos: Record<
@@ -42,8 +43,10 @@ export type MomentRound = {
 };
 export type MomentSchedule = {
   zone: string;
+  revealTime?: string;
   firstReveal: string;
   rounds: MomentRound[];
+  cadenceVersion?: 1 | 2;
 };
 export type MomentPhotoView = {
   userId: string;
@@ -53,12 +56,19 @@ export type MomentPhotoView = {
   revision?: string;
   reactions: MomentReaction[];
 };
-export type MomentRoundView = Omit<MomentRound, "photos"> & {
+export type MomentRoundView = Omit<
+  MomentRound,
+  "photos" | "prompt" | "promptAt"
+> & {
+  prompt: string | null;
+  promptAt: string;
+  promptReleased: boolean;
   revealed: boolean;
   photos: MomentPhotoView[];
 };
 export type MomentsView = {
   serverNow: string;
   zone: string;
+  revealTime: string;
   rounds: MomentRoundView[];
 };

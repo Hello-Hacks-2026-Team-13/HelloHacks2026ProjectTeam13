@@ -8,6 +8,7 @@ import {
   activeRound,
   canReadPhoto,
   momentsView,
+  setMomentRevealTime,
   DAY,
 } from "../src/moment-domain.ts";
 import type { Room } from "../../shared/types.ts";
@@ -24,15 +25,82 @@ function pair(zones = ["America/Vancouver", "Asia/Tokyo"]): Room {
     offers: [],
   };
 }
-test("daily moment selects earlier 9pm, grants at least 24h, and keeps its deadline fixed", () => {
+test("daily moment reveals one local day after setup and keeps its timezone fixed", () => {
   const room = pair();
   const now = Date.parse("2026-09-26T12:00:00Z");
   const round = prepareMoments(room, now);
   assert.equal(room.moments?.zone, "Asia/Tokyo");
-  assert.equal(DateTime.fromISO(round.revealAt).setZone("Asia/Tokyo").hour, 21);
-  assert.ok(Date.parse(round.revealAt) - now >= DAY);
+  assert.equal(room.moments?.revealTime, "21:00");
+  assert.equal(Date.parse(round.revealAt) - now, DAY);
+  assert.equal(Date.parse(round.revealAt) - Date.parse(round.promptAt!), 12 * 3600000);
+  assert.equal(
+    DateTime.fromISO(round.revealAt).setZone("Asia/Tokyo").hour,
+    DateTime.fromMillis(now, { zone: "Asia/Tokyo" }).hour,
+  );
   room.profiles[1].timezone = "America/Los_Angeles";
   assert.equal(prepareMoments(room, now + 1000).id, round.id);
+});
+test("legacy first reveals more than 24 hours away are moved to the daily cadence", () => {
+  const room = pair();
+  const now = Date.parse("2026-09-26T12:00:00Z");
+  const oldReveal = DateTime.fromMillis(now + 42 * 3600000, {
+    zone: "Asia/Tokyo",
+  });
+  const oldRound = {
+    id: String(oldReveal.toMillis()),
+    prompt: "An existing prompt",
+    revealAt: oldReveal.toISO()!,
+    expiresAt: new Date(oldReveal.toMillis() + DAY).toISOString(),
+    photos: {
+      "0": { file: "kept.jpg", revision: "rev", reactions: [] },
+    },
+  };
+  room.moments = {
+    zone: "Asia/Tokyo",
+    firstReveal: oldRound.revealAt,
+    rounds: [oldRound],
+  };
+
+  const round = prepareMoments(room, now);
+
+  assert.equal(Date.parse(round.revealAt) - now, DAY);
+  assert.equal(round.photos["0"].file, "kept.jpg");
+  assert.equal(room.moments?.cadenceVersion, 2);
+});
+test("custom reveal time releases one prompt 12 hours before each daily reveal", () => {
+  const room = pair();
+  const now = Date.parse("2026-09-26T00:00:00Z");
+  prepareMoments(room, now);
+
+  setMomentRevealTime(room, "21:00", now);
+  const first = prepareMoments(room, now);
+
+  assert.equal(
+    DateTime.fromISO(first.revealAt).setZone("Asia/Tokyo").toFormat("HH:mm"),
+    "21:00",
+  );
+  assert.equal(Date.parse(first.promptAt!), now);
+  assert.equal(
+    Date.parse(first.promptAt!),
+    DateTime.fromISO(first.revealAt).minus({ hours: 12 }).toMillis(),
+  );
+
+  const viewBeforeRelease = momentsView(room, "0", now - 1);
+  assert.equal(viewBeforeRelease.rounds[0].prompt, null);
+  assert.throws(() => requireUpload(room, first.id, now - 1), /not available yet/);
+  const viewAtRelease = momentsView(room, "0", now);
+  assert.equal(viewAtRelease.rounds[0].promptReleased, true);
+  assert.equal(viewAtRelease.rounds[0].prompt, first.prompt);
+  assert.equal(requireUpload(room, first.id, now).id, first.id);
+
+  const next = prepareMoments(room, Date.parse(first.revealAt));
+  assert.equal(
+    DateTime.fromISO(next.revealAt).setZone("Asia/Tokyo").toFormat("HH:mm"),
+    "21:00",
+  );
+  assert.equal(Date.parse(next.revealAt) - Date.parse(first.revealAt), DAY);
+  assert.equal(Date.parse(next.revealAt) - Date.parse(next.promptAt!), 12 * 3600000);
+  assert.equal(room.moments!.rounds.length, 2);
 });
 test("date line and fractional offsets use the leading local calendar zone", () => {
   for (const [zones, expected] of [
@@ -40,18 +108,25 @@ test("date line and fractional offsets use the leading local calendar zone", () 
     [["Asia/Kolkata", "Asia/Kathmandu"], "Asia/Kathmandu"],
   ] as const) {
     const room = pair([...zones]);
-    const round = prepareMoments(room, Date.parse("2026-09-26T10:00:00Z"));
+    const now = Date.parse("2026-09-26T10:00:00Z");
+    const round = prepareMoments(room, now);
     assert.equal(room.moments!.zone, expected);
-    assert.equal(DateTime.fromISO(round.revealAt).setZone(expected).hour, 21);
+    assert.equal(
+      DateTime.fromISO(round.revealAt).setZone(expected).hour,
+      DateTime.fromMillis(now, { zone: expected }).hour,
+    );
   }
 });
-test("reveal respects local 9pm across daylight saving; expiry is exactly 24 elapsed hours", () => {
+test("daily reveal preserves local time across daylight saving; expiry is exactly 24 elapsed hours", () => {
   const room = pair(["America/New_York", "America/Los_Angeles"]);
   const first = prepareMoments(room, Date.parse("2026-03-06T12:00:00Z"));
+  const firstLocalHour = DateTime.fromISO(first.revealAt)
+    .setZone("America/New_York")
+    .hour;
   const next = prepareMoments(room, Date.parse(first.revealAt));
   assert.equal(
     DateTime.fromISO(next.revealAt).setZone("America/New_York").hour,
-    21,
+    firstLocalHour,
   );
   assert.equal(
     Date.parse(next.revealAt) - Date.parse(first.revealAt),
@@ -59,7 +134,7 @@ test("reveal respects local 9pm across daylight saving; expiry is exactly 24 ela
   );
   assert.equal(Date.parse(next.expiresAt) - Date.parse(next.revealAt), DAY);
 });
-test("photos never reveal early, even when both submit; access ends at exact expiry", () => {
+test("photos stay private until their scheduled reveal and expire after 24 hours", () => {
   const room = pair();
   const now = Date.parse("2026-09-26T12:00:00Z");
   const round = prepareMoments(room, now);
