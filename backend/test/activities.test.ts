@@ -162,3 +162,54 @@ test("legacy offers and plans are excluded without requiring a migration", async
     ),
   );
 });
+
+test("long date lengths do not hide a one-hour cross-timezone overlap", async () => {
+  const state = room();
+  Object.assign(state.profiles[0], {
+    name: "You",
+    timezone: "America/Vancouver",
+    startHour: 20,
+    endHour: 23,
+    duration: 150,
+  });
+  Object.assign(state.profiles[1], {
+    name: "Alex",
+    timezone: "America/New_York",
+    startHour: 20,
+    endHour: 24,
+    duration: 120,
+  });
+  await assert.rejects(
+    suggest(state, [], false),
+    /overlap for at most 60 minutes/,
+  );
+});
+
+test("short partner date preference identifies the limiting saved setting", async () => {
+  const state = room();
+  state.profiles[0].duration = 150;
+  state.profiles[1].duration = 60;
+  state.profiles[1].name = "Alex";
+  await assert.rejects(
+    suggest(state, [], false),
+    /Alex's saved date length is 60 minutes/,
+  );
+});
+
+test("calendar or plan conflicts are distinguished from incompatible saved hours", async () => {
+  const state = room();
+  const now = Date.now();
+  await assert.rejects(
+    suggest(
+      state,
+      [
+        {
+          start: new Date(now).toISOString(),
+          end: new Date(now + 8 * 86400000).toISOString(),
+        },
+      ],
+      false,
+    ),
+    /Calendar conflicts or existing plans.*at most 0 minutes/,
+  );
+});

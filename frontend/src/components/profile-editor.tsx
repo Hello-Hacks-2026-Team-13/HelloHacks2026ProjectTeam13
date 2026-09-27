@@ -175,7 +175,7 @@ export function ProfileEditor({
                 key={minutes}
                 label={
                   minutes >= 60
-                    ? `${minutes / 60}${minutes % 60 ? ".5" : ""} hr`
+                    ? `${minutes / 60} ${minutes === 60 ? "hour" : "hours"}`
                     : `${minutes} min`
                 }
                 selected={value.duration === minutes}

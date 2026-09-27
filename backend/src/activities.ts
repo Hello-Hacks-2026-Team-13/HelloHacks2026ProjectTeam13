@@ -274,10 +274,31 @@ export async function suggest(room: Room, busy: Slot[], demo: boolean) {
   const slotFor = (minutes: number) =>
     findSlots(room.profiles, blocked, minutes, now, 1)[0];
   // Keep the requested three-category promise; do not replace missing categories.
-  if (max < 90 || !slotFor(90))
+  if (max < 90)
     throw new Error(
-      "A movie, game, and recipe set needs at least a 90-minute shared window. Widen your hours or date length in Our time. Your previous ideas are unchanged.",
+      `A full set needs a 90-minute shared window, but ${room.profiles
+        .filter((p) => p.duration < 90)
+        .map((p) => `${p.name}'s saved date length is ${p.duration} minutes`)
+        .join(
+          " and ",
+        )}. Both partners must allow at least 1.5 hours and save their preferences. Your previous ideas are unchanged.`,
     );
+  if (!slotFor(90)) {
+    let available = 0,
+      upper = 89;
+    while (available < upper) {
+      const middle = Math.ceil((available + upper) / 2);
+      if (slotFor(middle)) available = middle;
+      else upper = middle - 1;
+    }
+    const conflicts = findSlots(room.profiles, [], 90, now, 1).length > 0;
+    const reason = conflicts
+      ? "Calendar conflicts or existing plans reduce your shared free time"
+      : "Your saved hours and days, compared across both time zones, overlap";
+    throw new Error(
+      `${reason} for at most ${available} minutes in the next 7 days. A full set needs 90 minutes together. Date length does not extend your available hours. ${conflicts ? "Review conflicts or choose wider hours" : "Adjust your hours or days"} in Our time and save preferences. Your previous ideas are unchanged.`,
+    );
+  }
   let low = 90,
     high = max;
   while (low < high) {

@@ -25,6 +25,9 @@ export default function TimeScreen() {
     editingPartner && partner && config?.mode === "demo" ? partner : me;
   const [editedDraft, setDraft] = useState<Profile | null>(null);
   const draft = editedDraft?.id === target?.id ? editedDraft : target;
+  const hasChanges = Boolean(
+    draft && target && JSON.stringify(draft) !== JSON.stringify(target),
+  );
 
   if (!room || !me) {
     return (
@@ -78,6 +81,7 @@ export default function TimeScreen() {
             <Body key={profile.id}>
               {profile.name}: {profile.timezone} ·{" "}
               {formatHour(profile.startHour)}–{formatHour(profile.endHour)}
+              {` · date length: up to ${profile.duration / 60} hours`}
             </Body>
           ))}
         </Card>
@@ -114,6 +118,15 @@ export default function TimeScreen() {
             onChange={setDraft}
           />
         ) : null}
+        {hasChanges ? (
+          <Body>
+            Unsaved changes. Tap Save preferences before finding date ideas.
+          </Body>
+        ) : null}
+        <Body>
+          Date length is the longest date you want. Both partners’ available
+          hours must still overlap for that long.
+        </Body>
         <Button busy={busy} disabled={!draft?.name.trim()} onPress={save}>
           Save preferences
         </Button>
