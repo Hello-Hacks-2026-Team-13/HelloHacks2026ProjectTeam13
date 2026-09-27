@@ -99,9 +99,14 @@ begin
   insert into memberships values(actor, target.id);
   update rooms
   set data = jsonb_set(
-        data,
-        '{profiles}',
-        (data->'profiles') || jsonb_build_array(profile || jsonb_build_object('id', actor))
+        jsonb_set(
+          data,
+          '{profiles}',
+          (data->'profiles') || jsonb_build_array(profile || jsonb_build_object('id', actor))
+        ),
+        '{connectedAt}',
+        to_jsonb(now()::text),
+        true
       ),
       version = version + 1,
       invite_hash = null,

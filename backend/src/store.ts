@@ -125,6 +125,7 @@ export async function joinRoom(userId: string, code: string, profile: Profile) {
         if (existing.roomId === current.id) delete demo.invites[key];
     }
     demo.rooms[invite.roomId].profiles.push(profile);
+    demo.rooms[invite.roomId].connectedAt = new Date().toISOString();
     delete demo.invites[hash(code)];
     await persist();
   }

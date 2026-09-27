@@ -105,7 +105,10 @@ test("API: real pairing, private reads, three suggestions, two votes, cancellati
       409,
     );
     assert.equal((await call("/state", c)).data.room, null);
-    assert.equal((await call("/state", b)).data.room.profiles.length, 2);
+    const pairedRoom = (await call("/state", b)).data.room;
+    assert.equal(pairedRoom.profiles.length, 2);
+    assert.ok(Date.parse(pairedRoom.connectedAt) <= Date.now());
+    assert.ok(Date.parse(pairedRoom.connectedAt) >= Date.parse(pairedRoom.createdAt));
     const preferences = await call("/preferences", a, "PUT", {
       profile: { ...profile, gameGenres: [4, 7] },
     });

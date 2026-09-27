@@ -210,6 +210,7 @@ app.post("/api/demo/partner", async (_req, res) => {
       startHour: Math.min(me.startHour + 3, 20),
       endHour: 24,
     });
+    room.connectedAt = new Date().toISOString();
   });
   res.json({ ok: true });
 });

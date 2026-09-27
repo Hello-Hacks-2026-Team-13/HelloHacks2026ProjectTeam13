@@ -37,7 +37,9 @@ begin
   select * into target from rooms where invite_hash = invite_digest and invite_expires > now() for update;
   if not found or jsonb_array_length(target.data->'profiles') <> 1 then raise exception 'That invite is invalid, expired, or already used.'; end if;
   insert into memberships values(actor,target.id);
-  update rooms set data = jsonb_set(data,'{profiles}',(data->'profiles') || jsonb_build_array(profile || jsonb_build_object('id',actor))),
+  update rooms set data = jsonb_set(
+      jsonb_set(data,'{profiles}',(data->'profiles') || jsonb_build_array(profile || jsonb_build_object('id',actor))),
+      '{connectedAt}',to_jsonb(now()::text),true),
     version = version+1, invite_hash = null, invite_expires = null where id = target.id;
 end; $$;
 revoke all on function public.create_pair(uuid,jsonb,text), public.join_pair(uuid,jsonb,text) from public, anon, authenticated;

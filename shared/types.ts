@@ -38,6 +38,7 @@ export type Room = {
   offers: Offer[];
   plans: Plan[];
   createdAt: string;
+  connectedAt?: string;
 };
 export type AppState = {
   mode: "demo" | "live";

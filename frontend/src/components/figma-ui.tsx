@@ -7,13 +7,11 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
-import { router, usePathname } from "expo-router";
 import { useAcross } from "@/lib/across";
 import { artwork, fontFamily, palette } from "@/constants/design";
 
 export function PairHeader({ people = false }: { people?: boolean }) {
   const { state } = useAcross();
-  const pathname = usePathname();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60000);
@@ -28,18 +26,12 @@ export function PairHeader({ people = false }: { people?: boolean }) {
         across<Text style={{ color: palette.coral }}>.</Text>
       </Text>
     );
-  const days = room
-    ? Math.max(0, Math.floor((now - Date.parse(room.createdAt)) / 86400000))
+  const connectedAt = room?.connectedAt || room?.createdAt;
+  const days = partner && connectedAt
+    ? Math.max(0, Math.floor((now - Date.parse(connectedAt)) / 86400000))
     : 0;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Edit our time zones and availability"
-      onPress={() =>
-        router.push({ pathname: "/time", params: { returnTo: pathname } })
-      }
-      style={[styles.pair, people && styles.people]}
-    >
+    <View style={[styles.pair, people && styles.people]}>
       <View style={styles.person}>
         {people ? (
           <View style={styles.avatar}>
@@ -61,13 +53,9 @@ export function PairHeader({ people = false }: { people?: boolean }) {
         </View>
       </View>
       <View style={styles.connector}>
-        <Text style={styles.heart}>♡</Text>
+        <Text style={styles.heart}>♥</Text>
         <Text style={styles.connected}>
-          {people
-            ? partner
-              ? `Our space · day ${days + 1}`
-              : "Your shared space"
-            : "Our time"}
+          {partner ? `Connected for ${days} days` : "Not connected yet"}
         </Text>
       </View>
       <View style={[styles.person, styles.right]}>
@@ -95,7 +83,7 @@ export function PairHeader({ people = false }: { people?: boolean }) {
           </View>
         ) : null}
       </View>
-    </Pressable>
+    </View>
   );
 }
 function city(zone: string) {
