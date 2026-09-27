@@ -76,9 +76,9 @@ function providers(
 test("refresh gets exactly one unseen movie/game/recipe, paging beyond seen results", async (t) => {
   const urls = providers(t);
   const state = room();
-  const first = await suggest(state, [], false);
+  const first = await suggest(state, false);
   commitSuggestions(state, structuredClone(state), first.offers);
-  const second = await suggest(state, [], false);
+  const second = await suggest(state, false);
   assert.deepEqual(
     second.offers.map((o) => o.activity.kind),
     ["movie", "game", "meal"],
@@ -103,41 +103,41 @@ test("refresh gets exactly one unseen movie/game/recipe, paging beyond seen resu
 test("repeated random recipes cannot silently repeat or partly replace a set", async (t) => {
   providers(t, { repeatRecipe: true });
   const state = room();
-  const first = await suggest(state, [], false);
+  const first = await suggest(state, false);
   commitSuggestions(state, structuredClone(state), first.offers);
   const before = JSON.stringify(state);
-  await assert.rejects(suggest(state, [], false), /no unseen suitable recipe/);
+  await assert.rejects(suggest(state, false), /no unseen suitable recipe/);
   assert.equal(JSON.stringify(state), before);
 });
 
 test("provider failure, incompatible availability, and no shared genres keep the old set", async (t) => {
   providers(t, { failGame: true });
   const state = room();
-  await assert.rejects(suggest(state, [], false), /game provider unavailable/);
+  await assert.rejects(suggest(state, false), /game provider unavailable/);
   assert.deepEqual(state.offers, []);
   state.profiles[1].genres = [18];
-  await assert.rejects(suggest(state, [], false), /no unseen suitable movie/);
+  await assert.rejects(suggest(state, false), /no unseen suitable movie/);
   state.profiles[0].duration = 60;
-  await assert.rejects(suggest(state, [], false), /90-minute/);
+  await assert.rejects(suggest(state, false), /90-minute/);
 });
 
 test("movies still require availability in both countries", async (t) => {
   providers(t, { unavailableMovies: true });
-  await assert.rejects(suggest(room(), [], false), /no unseen suitable movie/);
+  await assert.rejects(suggest(room(), false), /no unseen suitable movie/);
 });
 
 test("simultaneous refreshes cannot commit duplicates or overwrite changed plans", async (t) => {
   providers(t);
   const state = room();
   const snapshot = structuredClone(state);
-  const first = await suggest(snapshot, [], false);
+  const first = await suggest(snapshot, false);
   commitSuggestions(state, snapshot, first.offers);
   assert.throws(
     () => commitSuggestions(state, snapshot, first.offers),
     /partner changed/,
   );
   const snapshot2 = structuredClone(state);
-  const second = await suggest(snapshot2, [], false);
+  const second = await suggest(snapshot2, false);
   state.plans.push({
     ...state.offers[0],
     createdBy: "a",
@@ -153,9 +153,9 @@ test("simultaneous refreshes cannot commit duplicates or overwrite changed plans
 test("legacy offers and plans are excluded without requiring a migration", async (t) => {
   providers(t);
   const state = room();
-  const initial = await suggest(state, [], false);
+  const initial = await suggest(state, false);
   state.offers = initial.offers;
-  const next = await suggest(state, [], false);
+  const next = await suggest(state, false);
   assert.ok(
     next.offers.every(
       (o) => !initial.offers.some((old) => old.activity.id === o.activity.id),
@@ -180,7 +180,7 @@ test("long date lengths do not hide a one-hour cross-timezone overlap", async ()
     duration: 120,
   });
   await assert.rejects(
-    suggest(state, [], false),
+    suggest(state, false),
     /overlap for at most 60 minutes/,
   );
 });
@@ -191,25 +191,42 @@ test("short partner date preference identifies the limiting saved setting", asyn
   state.profiles[1].duration = 60;
   state.profiles[1].name = "Alex";
   await assert.rejects(
-    suggest(state, [], false),
+    suggest(state, false),
     /Alex's saved date length is 60 minutes/,
   );
 });
 
-test("calendar or plan conflicts are distinguished from incompatible saved hours", async () => {
+test("existing plans are distinguished from incompatible saved hours", async () => {
   const state = room();
   const now = Date.now();
   await assert.rejects(
     suggest(
-      state,
-      [
-        {
-          start: new Date(now).toISOString(),
-          end: new Date(now + 8 * 86400000).toISOString(),
-        },
-      ],
+      {
+        ...state,
+        plans: [
+          {
+            id: "existing",
+            slot: {
+              start: new Date(now).toISOString(),
+              end: new Date(now + 8 * 86400000).toISOString(),
+            },
+            activity: {
+              id: "old",
+              title: "Existing plan",
+              subtitle: "",
+              description: "",
+              minutes: 90,
+              kind: "creative",
+              source: "curated",
+            },
+            status: "pending",
+            acceptedBy: ["a"],
+            createdBy: "a",
+          },
+        ],
+      },
       false,
     ),
-    /Calendar conflicts or existing plans.*at most 0 minutes/,
+    /Existing plans reduce.*at most 0 minutes/,
   );
 });

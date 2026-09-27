@@ -36,7 +36,6 @@ export function newProfile(name = ""): Profile {
     days: [1, 2, 3, 4, 5, 6, 7],
     genres: [35, 10749],
     duration: 120,
-    calendarConnected: false,
   };
 }
 

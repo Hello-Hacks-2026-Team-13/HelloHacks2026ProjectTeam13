@@ -21,7 +21,7 @@ const second = {
   startHour: 20,
   endHour: 24,
 };
-test("matches different time zones and removes calendar conflicts", () => {
+test("matches different time zones and blocks supplied busy slots", () => {
   const busy = [{ start: "2026-09-27T00:00:00Z", end: "2026-09-27T01:00:00Z" }];
   const slots = findSlots(
     [first, second],

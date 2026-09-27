@@ -11,23 +11,12 @@ create table public.memberships (
   room_id uuid not null references public.rooms(id) on delete cascade
 );
 create index memberships_room_idx on public.memberships(room_id);
-create table public.calendar_tokens (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  encrypted text not null
-);
-create table public.oauth_states (
-  digest text primary key,
-  user_id uuid not null references auth.users(id) on delete cascade,
-  expires_at timestamptz not null
-);
 alter table public.rooms enable row level security;
 alter table public.memberships enable row level security;
-alter table public.calendar_tokens enable row level security;
-alter table public.oauth_states enable row level security;
 -- No browser policies: authenticated requests go through Express, which verifies
 -- the bearer token and derives the actor from Supabase Auth (never request data).
-revoke all on public.rooms, public.memberships, public.calendar_tokens, public.oauth_states from anon, authenticated;
-grant all on public.rooms, public.memberships, public.calendar_tokens, public.oauth_states to service_role;
+revoke all on public.rooms, public.memberships from anon, authenticated;
+grant all on public.rooms, public.memberships to service_role;
 
 create function public.create_pair(actor uuid, profile jsonb, invite_digest text)
 returns void language plpgsql set search_path = public as $$

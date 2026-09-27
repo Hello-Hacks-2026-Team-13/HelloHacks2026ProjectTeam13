@@ -39,8 +39,6 @@ begin
     raise exception 'Only a member of this pairing can remove it.';
   end if;
 
-  delete from calendar_tokens where user_id = any(member_ids);
-  delete from oauth_states where user_id = any(member_ids);
   delete from memberships where room_id = target_room_id;
   delete from rooms where id = target_room_id;
 end;
@@ -94,8 +92,6 @@ begin
   end if;
 
   if prior_room_id is not null then
-    delete from calendar_tokens where user_id = actor;
-    delete from oauth_states where user_id = actor;
     delete from memberships where room_id = prior_room_id;
     delete from rooms where id = prior_room_id;
   end if;

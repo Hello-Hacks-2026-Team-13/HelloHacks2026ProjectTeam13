@@ -1,8 +1,6 @@
 import { useState } from "react";
-import { Alert, Platform, Share, StyleSheet, Text, View } from "react-native";
+import { Share, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import * as ExpoLinking from "expo-linking";
-import * as WebBrowser from "expo-web-browser";
 import { acrossApi, useAcross } from "@/lib/across";
 import {
   Body,
@@ -40,8 +38,6 @@ export default function ConnectionsScreen() {
     (profile) => profile.id !== state?.userId,
   );
   const paired = Boolean(partner);
-  const calendarConnected = Boolean(me?.calendarConnected);
-
   const pairName = pairNameDraft ?? me?.name ?? "";
 
   const createOrJoin = () => {
@@ -89,52 +85,11 @@ export default function ConnectionsScreen() {
       setInvite("");
     }, "Pairing removed. Shared data for this space has been deleted. You can now join another space.");
 
-  const connectCalendar = () =>
-    void execute(async () => {
-      const { url, browserUrl } = await acrossApi<{
-        url: string;
-        browserUrl: string;
-      }>("/calendar/connect", "POST");
-      if (Platform.OS === "web") {
-        window.location.assign(url);
-        return;
-      }
-      const result = await WebBrowser.openAuthSessionAsync(
-        browserUrl,
-        ExpoLinking.createURL("/connections"),
-      );
-      if (result.type !== "success")
-        throw new Error("Calendar sign-in was cancelled.");
-      if (ExpoLinking.parse(result.url).queryParams?.calendar === "error")
-        throw new Error(
-          "Google Calendar could not complete the connection. Check the OAuth callback settings and try again.",
-        );
-    }, "Google Calendar connected.");
-
-  const disconnectCalendar = () => {
-    Alert.alert(
-      "Disconnect Google Calendar?",
-      "Future date suggestions will no longer check this calendar for busy times.",
-      [
-        { text: "Keep connected", style: "cancel" },
-        {
-          text: "Disconnect",
-          style: "destructive",
-          onPress: () =>
-            void execute(
-              () => acrossApi("/calendar", "DELETE"),
-              "Google Calendar disconnected.",
-            ),
-        },
-      ],
-    );
-  };
-
   return (
     <Screen
       header="people"
       title="Account"
-      description="Manage your partner, invite code, and optional calendar access here."
+      description="Manage your partner and invite code here."
     >
       {error ? (
         <Notice tone="error">
@@ -256,7 +211,7 @@ export default function ConnectionsScreen() {
 
       {config?.mode === "demo" ? (
         <Card>
-          <Heading detail="Use this to preview the connection workflow without an external calendar account.">
+          <Heading detail="Use this to preview the partner connection workflow.">
             Demo partner
           </Heading>
           <Body>
@@ -280,42 +235,6 @@ export default function ConnectionsScreen() {
           ) : null}
         </Card>
       ) : null}
-
-      <Card>
-        <Heading detail="Across checks free/busy times only. Event names and details stay private.">
-          Google Calendar
-        </Heading>
-        <StatusLine
-          label="Connection"
-          value={calendarConnected ? "Connected" : "Not connected"}
-          positive={calendarConnected}
-        />
-        <StatusLine
-          label="Setup"
-          value={state?.calendarReady ? "Available" : "Needs server setup"}
-          positive={Boolean(state?.calendarReady)}
-        />
-        {calendarConnected ? (
-          <Button kind="quiet" disabled={busy} onPress={disconnectCalendar}>
-            Disconnect calendar
-          </Button>
-        ) : (
-          <Button
-            kind="secondary"
-            disabled={!state?.calendarReady || !room}
-            busy={busy}
-            onPress={connectCalendar}
-          >
-            Connect Google Calendar
-          </Button>
-        )}
-        {!state?.calendarReady ? (
-          <Body>
-            Calendar sign-in needs Google OAuth client settings and token
-            encryption configured on the backend.
-          </Body>
-        ) : null}
-      </Card>
 
       <Card>
         <Heading detail="Provider credentials stay on the backend; they are never sent to the app.">
@@ -343,7 +262,7 @@ export default function ConnectionsScreen() {
 
       {paired ? (
         <Card style={styles.removeCard}>
-          <Heading detail="Either person can remove the pairing. The shared room and all stored plans and calendar tokens are deleted.">
+          <Heading detail="Either person can remove the pairing. The shared room and all stored plans are deleted.">
             Remove this pairing
           </Heading>
           {removeStep === 0 ? (
@@ -362,8 +281,8 @@ export default function ConnectionsScreen() {
               <Notice tone="error">
                 <NoticeText>
                   This cannot be undone. Your shared schedules, suggestions,
-                  plans, membership, invite, and stored calendar tokens for this
-                  pairing will be deleted.
+                  plans, membership, and invite for this pairing will be
+                  deleted.
                 </NoticeText>
               </Notice>
               {removeStep === 1 ? (
