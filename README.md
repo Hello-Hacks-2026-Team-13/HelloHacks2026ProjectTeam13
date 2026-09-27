@@ -2,7 +2,7 @@
 
 A first draft of a long-distance relationship app: **pair accounts → set preferences and available hours → find overlap → show three activities → both accept → save the plan**.
 
-The mobile and web client is built with React Native, Expo, TypeScript, and Expo Router. The Node.js backend uses Express and TypeScript. Supabase provides live authentication and shared persistence. Google Calendar contributes busy times. TMDB, RAWG, and TheMealDB provide movie, co-op game, and recipe ideas. The previous React/Vite client is kept in `frontend_old` as a reference.
+The mobile and web client is built with React Native, Expo, TypeScript, and Expo Router. The Node.js backend uses Express and TypeScript. Supabase provides live authentication and shared persistence. TMDB, RAWG, and TheMealDB provide movie, co-op game, and recipe ideas. The previous React/Vite client is kept in `frontend_old` as a reference.
 
 ## Try the draft
 
@@ -33,18 +33,17 @@ No Codex plugins are needed to run these integrations. Configure your app's cred
 
 ```sh
 cp backend/.env.example backend/.env
-openssl rand -hex 32
 ```
 
-Use the generated hex value for `TOKEN_ENCRYPTION_KEY` and keep it stable. Replacing it requires reconnecting calendars. Leave `APP_MODE=demo` until the setup below is complete.
+Leave `APP_MODE=demo` until the setup below is complete.
 
-If you already have `backend/.env`, update `APP_ORIGIN` to the Expo Web URL (`http://localhost:8081`) and set `API_ORIGIN` and `GOOGLE_REDIRECT_URI` to the backend URL shown below. Keep your existing secret values when editing it.
+If you already have `backend/.env`, update `APP_ORIGIN` to the Expo Web URL (`http://localhost:8081`). Keep your existing provider secret values when editing it.
 
-`APP_ORIGIN` is the Expo Web origin used for browser CORS and calendar callback redirects. The example uses `http://localhost:8081`. `API_ORIGIN` is the backend address used for Google OAuth callbacks. When testing Expo Web from a phone, add its web origin (for example, `http://192.168.1.42:8081`) to `APP_ALLOWED_ORIGINS`. For the native app, set `EXPO_PUBLIC_API_URL` in `frontend/.env` to the computer's LAN API address; native API requests do not use the browser CORS allowlist.
+`APP_ORIGIN` is the Expo Web origin used for browser CORS. The example uses `http://localhost:8081`. When testing Expo Web from a phone, add its web origin (for example, `http://192.168.1.42:8081`) to `APP_ALLOWED_ORIGINS`. For the native app, set `EXPO_PUBLIC_API_URL` in `frontend/.env` to the computer's LAN API address; native API requests do not use the browser CORS allowlist.
 
 ### 1. Supabase: accounts and plans
 
-- Run [`supabase/schema.sql`](supabase/schema.sql) once in your project's SQL Editor. It creates `rooms`, `memberships`, `calendar_tokens`, `oauth_states`, and two transactional pairing functions. Also run [`supabase/pair_removal.sql`](supabase/pair_removal.sql) to install the pairing removal function and allow solo accounts to switch spaces. If you applied an earlier version of that file, run the updated one again. Review existing table names before applying to a project that already has data.
+- Run [`supabase/schema.sql`](supabase/schema.sql) once in your project's SQL Editor. It creates `rooms`, `memberships`, and two transactional pairing functions. Also run [`supabase/pair_removal.sql`](supabase/pair_removal.sql) to install the pairing removal function and allow solo accounts to switch spaces. If you applied an earlier version of that file, run the updated one again. For an existing project, run [`supabase/remove_google_calendar.sql`](supabase/remove_google_calendar.sql) once to delete old Google sync tokens, OAuth states, and profile flags, then re-run `pair_removal.sql` to replace the old functions. Review existing table names before applying to a project that already has data.
 - Set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY` in `backend/.env` from your project's **Connect** dialog or **Settings → API Keys**. The publishable key is used by the app for Supabase Auth; the secret key stays on the Express server and bypasses RLS, so never put it in frontend code or an `EXPO_PUBLIC_` variable.
 - In **Authentication → URL Configuration**, set the local web Site URL to `http://localhost:8081` and allow it as a redirect URL. For installed native builds, allow the `across://**` redirect pattern for the app's deep link scheme.
 - Enable email authentication. Sign-in uses emailed magic links with PKCE. For local web, open each link in the same browser that requested it; on native builds, the link returns through the Across app scheme.
@@ -53,27 +52,11 @@ If you already have `backend/.env`, update `APP_ORIGIN` to the Expo Web URL (`ht
 
 Tables have RLS enabled and no client access policies. All application data requests go through Express, which validates the Supabase access token, derives the user ID from that validated token, and checks membership before using its server-side database client. The secret key never reaches the app. Invitations are stored as SHA-256 digests. Row locking and a unique user membership prevent double joins; optimistic version checks prevent concurrent acceptances from overwriting each other.
 
-Either partner can remove the pairing from **Connections** after several confirmation steps. This immediately deletes the shared room and plans, memberships, invite, encrypted Google Calendar tokens, and pending OAuth states from Supabase. Individual Supabase sign-in accounts are retained. Google authorization may need to be revoked separately in Google Account settings. After the pairing is removed, either account can join a different space with an invite code or create a new one.
+Either partner can remove the pairing from **Connections** after several confirmation steps. This immediately deletes the shared room and plans, memberships, and invite from Supabase. Individual Supabase sign-in accounts are retained. After the pairing is removed, either account can join a different space with an invite code or create a new one.
 
 Partner state refreshes every 10 seconds. This draft uses polling, not Supabase Realtime.
 
-### 2. Google Cloud: Calendar access
-
-- In your existing Google Cloud project, enable the **Google Calendar API**.
-- Configure the OAuth consent screen in Google Auth Platform. While the app is in testing, add both testers' Google accounts under Audience / Test users.
-- Add this scope under Data Access: `https://www.googleapis.com/auth/calendar.freebusy`.
-- Create an OAuth client of type **Web application**.
-- Add the exact authorized redirect URI: `http://localhost:3001/api/calendar/callback`.
-- Put the client ID and client secret into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `backend/.env`. Set `GOOGLE_REDIRECT_URI` to that same redirect URI and set `TOKEN_ENCRYPTION_KEY` as above.
-- Restart the server. Each signed-in partner opens **Connections → Connect Google Calendar** and authorizes their own calendar.
-
-Calendar OAuth is separate from app sign-in. The callback uses an expiring single-use state bound to an HttpOnly SameSite cookie. Refresh tokens are encrypted using AES-256-GCM at rest in Supabase. The server retrieves only primary-calendar busy intervals, not event titles or descriptions, and never returns raw calendar intervals to the partner. Busy times are fetched during matching and rechecked on acceptance. If Google fails, matching/acceptance fails visibly instead of silently treating that calendar as empty.
-
-The native app opens Google in a browser session and returns through the `across` app link. For native Calendar testing, `API_ORIGIN`, `GOOGLE_REDIRECT_URI`, and `EXPO_PUBLIC_API_URL` must point to a backend address reachable from both the phone and Google's callback; use an HTTPS development tunnel or deployed backend. Expo Web on the same computer can use the local addresses above.
-
-This version reads the **primary calendar only**. Calendar selection, push synchronization, and automatically creating Google events are future work. Accepted plans are saved in Supabase and can be exported as `.ics`; export is not two-way sync. Disconnect removes the stored token; Google account permissions can also be revoked from your Google Account settings. Google testing-mode refresh tokens can expire, requiring reconnection.
-
-### 3. TMDB: movie suggestions
+### 2. TMDB: movie suggestions
 
 - Request API access in your [TMDB account settings](https://www.themoviedb.org/settings/api).
 - Set `TMDB_READ_ACCESS_TOKEN` to the **API Read Access Token** (the long bearer token, not the short API key).
@@ -83,7 +66,7 @@ The server first searches genres both partners selected, then falls back to any 
 
 If a provider fails or no complete unseen movie/game/recipe set fits, the app keeps the previous ideas and reports why. Without credentials, demo movie-night cards are explicitly labeled as samples. Movie descriptions are not sent to an LLM.
 
-### 4. RAWG and TheMealDB: game and recipe ideas
+### 3. RAWG and TheMealDB: game and recipe ideas
 
 - Get a RAWG key from [RAWG API docs](https://rawg.io/apidocs) and set `RAWG_API_KEY` in `backend/.env`. The server requests highly rated games tagged for online co-op and adds a link back to RAWG. Follow RAWG's current plan, request limits, and attribution terms.
 - TheMealDB's free developer test key is `1`, so `THEMEALDB_API_KEY=1` works for local development. Replace it with a supporter key if you have one. The server requests a random recipe, retries up to five times if it has already been shown, and links to its recipe/source page.
@@ -102,9 +85,9 @@ npm test       # Scheduling, validation, mutual acceptance, and local API integr
 npm run format
 ```
 
-Tests cover DST, fractional timezone offsets, weekdays, duration limits, calendar conflicts, missing/no overlap, outsiders, expired dates, idempotent votes, single-use pairing, persistent saved plans, and cancellation. The API integration test uses a temporary data directory and a separate loopback port; it does not touch your Supabase project.
+Tests cover DST, fractional timezone offsets, weekdays, duration limits, existing plan conflicts, missing/no overlap, outsiders, expired dates, idempotent votes, single-use pairing, persistent saved plans, and cancellation. The API integration test uses a temporary data directory and a separate loopback port; it does not touch your Supabase project.
 
-Live Supabase SQL/auth, Google consent/token refresh, and authenticated TMDB, RAWG, or TheMealDB responses require provider credentials and aren't exercised by the local test suite.
+Live Supabase SQL/auth and authenticated TMDB, RAWG, or TheMealDB responses require provider credentials and aren't exercised by the local test suite.
 
 ## Project layout
 
@@ -115,10 +98,9 @@ frontend/src/components/   Shared native UI and profile editor
 frontend/.env.example      API URL for local device development
 frontend_old/              Previous React/Vite client retained as a reference
 shared/types.ts            Shared domain types
-backend/src/index.ts       Authenticated Express API and OAuth callback
+backend/src/index.ts       Authenticated Express API
 backend/src/domain.ts      Availability matching and acceptance rules
 backend/src/store.ts       Local persistence and Supabase storage
-backend/src/calendar.ts    Google OAuth, encrypted tokens, and free/busy reads
 backend/src/activities.ts  TMDB, RAWG, TheMealDB, and persistent non-repeating sets
 backend/test/              Unit and API integration tests
 supabase/schema.sql        Database setup and private access rules
@@ -132,13 +114,12 @@ backend/.env.example       Backend and provider integration settings
 - One daily availability window; overnight windows and per-day overrides are not built yet.
 - Slots are searched in 15-minute increments over the next seven days, with at least 15 minutes' lead time. UTC timestamps are converted using IANA time zones.
 - A suggestion records the proposer’s acceptance. Both partners must accept before it is saved. Either partner may cancel it.
-- No background reminders, calendar write access, chat, photo uploads, or video calls. The asynchronous prompt can be copied into an existing messaging app.
-- No automatic plan rescheduling if a calendar changes after acceptance.
+- No background reminders, calendar sync or write access, chat, photo uploads, or video calls. The asynchronous prompt can be copied into an existing messaging app.
 - Small-project JSON room storage is intentional for this draft; normalize plans and activity history before scaling beyond a prototype.
 
 ## Deployment later
 
-Build with `npm run build`, set `NODE_ENV=production`, `APP_MODE=live`, `HOST=0.0.0.0`, `APP_ORIGIN=https://your-domain`, and `API_ORIGIN=https://your-domain`, then run `npm start`. Express serves `frontend/dist` and `/api` from one origin. Update Supabase redirect configuration and the Google OAuth redirect URI (`https://your-domain/api/calendar/callback`). Keep `tsx` available in the runtime install. If deploying behind a trusted reverse proxy, configure Express trust-proxy explicitly for your host before using IP-based rate limiting. The local demo is not a public hosting mode.
+Build with `npm run build`, set `NODE_ENV=production`, `APP_MODE=live`, `HOST=0.0.0.0`, and `APP_ORIGIN=https://your-domain`, then run `npm start`. Express serves `frontend/dist` and `/api` from one origin. Update Supabase redirect configuration. Keep `tsx` available in the runtime install. If deploying behind a trusted reverse proxy, configure Express trust-proxy explicitly for your host before using IP-based rate limiting. The local demo is not a public hosting mode.
 
 ### Our daily moment
 
@@ -158,8 +139,8 @@ After reveal, each partner can leave one editable emoji/message (up to 240 chara
 
 ### Rotating date ideas
 
-A shared `suggestionHistory` in the existing room JSON stores the IDs of every successfully displayed recommendation. Refreshes also exclude legacy offers and plans. History survives page reloads, API restarts, profile edits, and switching between partners; it lasts for the lifetime of that shared space. There is no automatic history reset or repeat fallback. No SQL migration or new credentials are required.
+A shared `suggestionHistory` in the existing room JSON stores the IDs of every successfully displayed recommendation and normalized movie/game titles. Refreshes also exclude legacy offers and plans. History survives page reloads, API restarts, profile edits, and switching between partners; it lasts for the lifetime of that shared space. There is no automatic history reset or repeat fallback. No SQL migration or new credentials are required.
 
-All ideas contains exactly one movie, one game, and one recipe. Category tabs filter this trio. Movie selection prioritizes shared genres, then falls back to either partner’s genres with OR matching while retaining actual runtime and watch options in both countries. Games reserve 60 minutes and recipes 90 minutes; recipe times are session estimates. Each activity must fit a shared free window, including calendar conflicts and existing plans. For bounded provider work, each search checks up to five movie result pages per genre tier, five game result pages and five random recipe responses. A search may fail before the provider's full catalog is exhausted; the UI reports that no complete fresh set was found in that search rather than repeating an item.
+All ideas contains exactly one movie, one game, and one recipe. Category tabs filter this trio. Movie selection prioritizes shared genres, then falls back to either partner’s genres with OR matching while retaining actual runtime and watch options in both countries. Games reserve 60 minutes and recipes 90 minutes; recipe times are session estimates. Each activity must fit a shared free window, accounting for existing plans. For bounded provider work, each search checks up to five movie result pages per genre tier, five game result pages and five random recipe responses. A search may fail before the provider's full catalog is exhausted; the UI reports that no complete fresh set was found in that search rather than repeating an item.
 
 The three offers and their history commit together. Concurrent partner changes to preferences, plans, or suggestions reject the stale search; the person can retry against the updated space. Failed searches neither replace the old set nor consume unseen candidates. Provider-backed tests use mocked responses; API integration tests use credential-free samples and never read optional `apis.env` provider keys when `NODE_ENV=test`.

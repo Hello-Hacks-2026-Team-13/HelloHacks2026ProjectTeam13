@@ -95,9 +95,9 @@ function providers(
 test("refresh gets exactly one unseen movie/game/recipe, paging beyond seen results", async (t) => {
   const urls = providers(t);
   const state = room();
-  const first = await suggest(state, [], false);
+  const first = await suggest(state, false);
   commitSuggestions(state, structuredClone(state), first.offers);
-  const second = await suggest(state, [], false);
+  const second = await suggest(state, false);
   assert.deepEqual(
     second.offers.map((o) => o.activity.kind),
     ["movie", "game", "meal"],
@@ -116,45 +116,52 @@ test("refresh gets exactly one unseen movie/game/recipe, paging beyond seen resu
     urls.some((url) => url.includes("rawg.io") && url.includes("page=2")),
   );
   commitSuggestions(state, structuredClone(state), second.offers);
-  assert.equal(state.suggestionHistory!.length, 6);
+  assert.equal(
+    state.suggestionHistory!.filter((key) => !key.startsWith("title:")).length,
+    6,
+  );
+  assert.equal(
+    state.suggestionHistory!.filter((key) => key.startsWith("title:")).length,
+    4,
+  );
 });
 
 test("repeated random recipes cannot silently repeat or partly replace a set", async (t) => {
   providers(t, { repeatRecipe: true });
   const state = room();
-  const first = await suggest(state, [], false);
+  const first = await suggest(state, false);
   commitSuggestions(state, structuredClone(state), first.offers);
   const before = JSON.stringify(state);
-  await assert.rejects(suggest(state, [], false), /no unseen suitable recipe/);
+  await assert.rejects(suggest(state, false), /no unseen suitable recipe/);
   assert.equal(JSON.stringify(state), before);
 });
 
 test("provider failure and incompatible availability keep the old set", async (t) => {
   providers(t, { failGame: true });
   const state = room();
-  await assert.rejects(suggest(state, [], false), /game provider unavailable/);
+  await assert.rejects(suggest(state, false), /game provider unavailable/);
   assert.deepEqual(state.offers, []);
   state.profiles[0].duration = 60;
-  await assert.rejects(suggest(state, [], false), /90-minute/);
+  await assert.rejects(suggest(state, false), /90-minute/);
 });
 
 test("movies still require availability in both countries", async (t) => {
   providers(t, { unavailableMovies: true });
-  await assert.rejects(suggest(room(), [], false), /no unseen suitable movie/);
+  await assert.rejects(suggest(room(), false), /no unseen suitable movie/);
 });
 
 test("simultaneous refreshes cannot commit duplicates or overwrite changed plans", async (t) => {
   providers(t);
   const state = room();
   const snapshot = structuredClone(state);
-  const first = await suggest(snapshot, [], false);
+  const first = await suggest(snapshot, false);
   commitSuggestions(state, snapshot, first.offers);
   assert.throws(
     () => commitSuggestions(state, snapshot, first.offers),
     /partner changed/,
   );
   const snapshot2 = structuredClone(state);
-  const second = await suggest(snapshot2, [], false);
+  const second = await suggest(snapshot2, false);
   state.plans.push({
     ...state.offers[0],
     createdBy: "a",
@@ -170,9 +177,9 @@ test("simultaneous refreshes cannot commit duplicates or overwrite changed plans
 test("legacy offers and plans are excluded without requiring a migration", async (t) => {
   providers(t);
   const state = room();
-  const initial = await suggest(state, [], false);
+  const initial = await suggest(state, false);
   state.offers = initial.offers;
-  const next = await suggest(state, [], false);
+  const next = await suggest(state, false);
   assert.ok(
     next.offers.every(
       (o) => !initial.offers.some((old) => old.activity.id === o.activity.id),
@@ -196,10 +203,7 @@ test("long date lengths do not hide a one-hour cross-timezone overlap", async ()
     endHour: 24,
     duration: 120,
   });
-  await assert.rejects(
-    suggest(state, [], false),
-    /overlap for at most 60 minutes/,
-  );
+  await assert.rejects(suggest(state, false), /overlap for at most 60 minutes/);
 });
 
 test("short partner date preference identifies the limiting saved setting", async () => {
@@ -208,26 +212,43 @@ test("short partner date preference identifies the limiting saved setting", asyn
   state.profiles[1].duration = 60;
   state.profiles[1].name = "Alex";
   await assert.rejects(
-    suggest(state, [], false),
+    suggest(state, false),
     /Alex's saved date length is 60 minutes/,
   );
 });
 
-test("calendar or plan conflicts are distinguished from incompatible saved hours", async () => {
+test("existing plans are distinguished from incompatible saved hours", async () => {
   const state = room();
   const now = Date.now();
   await assert.rejects(
     suggest(
-      state,
-      [
-        {
-          start: new Date(now).toISOString(),
-          end: new Date(now + 8 * 86400000).toISOString(),
-        },
-      ],
+      {
+        ...state,
+        plans: [
+          {
+            id: "existing",
+            slot: {
+              start: new Date(now).toISOString(),
+              end: new Date(now + 8 * 86400000).toISOString(),
+            },
+            activity: {
+              id: "old",
+              title: "Existing plan",
+              subtitle: "",
+              description: "",
+              minutes: 90,
+              kind: "creative",
+              source: "curated",
+            },
+            status: "pending",
+            acceptedBy: ["a"],
+            createdBy: "a",
+          },
+        ],
+      },
       false,
     ),
-    /Calendar conflicts or existing plans.*at most 0 minutes/,
+    /Existing plans reduce.*at most 0 minutes/,
   );
 });
 
@@ -247,7 +268,7 @@ test("different tastes use Adventure OR Animation OR Mystery, without requiring 
   const state = room();
   state.profiles[0].genres = [12, 16];
   state.profiles[1].genres = [9648];
-  const result = await suggest(state, [], false);
+  const result = await suggest(state, false);
   assert.equal(result.offers[0].activity.id, "tmdb-31");
   assert.equal(result.offers.length, 3);
   assert.deepEqual(
@@ -267,7 +288,7 @@ test("shared genres stay ahead of either-partner genres even on later pages", as
   state.profiles[0].genres = [12, 16];
   state.profiles[1].genres = [16, 9648];
   state.suggestionHistory = ["tmdb-1"];
-  const result = await suggest(state, [], false);
+  const result = await suggest(state, false);
   assert.equal(result.offers[0].activity.id, "tmdb-2");
   assert.deepEqual(
     movieQueries(urls).map((url) => url.searchParams.get("with_genres")),
@@ -275,10 +296,10 @@ test("shared genres stay ahead of either-partner genres even on later pages", as
   );
 });
 
-test("fallback broadens genres but still excludes repeats, long runtimes, and unavailable movies", async (t) => {
+test("fallback broadens genres but still excludes repeated IDs and titles, long runtimes, and unavailable movies", async (t) => {
   const urls = providers(t, {
     movieSearch: (genres) => ({
-      ids: genres === "16" ? [1, 2, 3] : [1, 2, 3, 4, 5, 6],
+      ids: genres === "16" ? [1, 2, 3, 7] : [1, 2, 3, 4, 5, 6, 7],
       totalPages: 1,
     }),
     runtimeFor: (id) => ([2, 4].includes(id) ? 180 : 95),
@@ -287,8 +308,8 @@ test("fallback broadens genres but still excludes repeats, long runtimes, and un
   const state = room();
   state.profiles[0].genres = [12, 16];
   state.profiles[1].genres = [16, 9648];
-  state.suggestionHistory = ["tmdb-1"];
-  const result = await suggest(state, [], false);
+  state.suggestionHistory = ["tmdb-1", "title:movie:movie 7"];
+  const result = await suggest(state, false);
   assert.equal(result.offers[0].activity.id, "tmdb-6");
   assert.deepEqual(
     movieQueries(urls).map((url) => url.searchParams.get("with_genres")),
@@ -302,9 +323,13 @@ test("fallback broadens genres but still excludes repeats, long runtimes, and un
     urls.filter((url) => new URL(url).pathname === "/3/movie/1").length,
     0,
   );
+  assert.equal(
+    urls.filter((url) => new URL(url).pathname === "/3/movie/7").length,
+    0,
+  );
   commitSuggestions(state, structuredClone(state), result.offers);
   const before = JSON.stringify(state);
-  await assert.rejects(suggest(state, [], false), /no unseen suitable movie/);
+  await assert.rejects(suggest(state, false), /no unseen suitable movie/);
   assert.equal(JSON.stringify(state), before);
 });
 
@@ -318,10 +343,7 @@ test("an empty shared-genre result falls back to the deduplicated union", async 
   const state = room();
   state.profiles[0].genres = [12, 16, 16];
   state.profiles[1].genres = [16, 9648, 9648];
-  assert.equal(
-    (await suggest(state, [], false)).offers[0].activity.id,
-    "tmdb-7",
-  );
+  assert.equal((await suggest(state, false)).offers[0].activity.id, "tmdb-7");
   assert.deepEqual(
     movieQueries(urls).map((url) => url.searchParams.get("with_genres")),
     ["16", "12|16|9648"],
@@ -332,7 +354,7 @@ test("identical tastes do not repeat the same exhausted genre search", async (t)
   const urls = providers(t, {
     movieSearch: () => ({ ids: [], totalPages: 1 }),
   });
-  await assert.rejects(suggest(room(), [], false), /no unseen suitable movie/);
+  await assert.rejects(suggest(room(), false), /no unseen suitable movie/);
   assert.equal(movieQueries(urls).length, 1);
 });
 
@@ -341,7 +363,7 @@ test("one partner with no genre preference uses the other partner's genres", asy
   const state = room();
   state.profiles[0].genres = [];
   state.profiles[1].genres = [12, 16];
-  assert.equal((await suggest(state, [], false)).offers.length, 3);
+  assert.equal((await suggest(state, false)).offers.length, 3);
   assert.equal(movieQueries(urls)[0].searchParams.get("with_genres"), "12|16");
 });
 
@@ -351,7 +373,7 @@ test("both partners with no genre preference can receive unrestricted genre sugg
   state.profiles.forEach((profile) => {
     profile.genres = [];
   });
-  assert.equal((await suggest(state, [], false)).offers.length, 3);
+  assert.equal((await suggest(state, false)).offers.length, 3);
   assert.equal(movieQueries(urls)[0].searchParams.has("with_genres"), false);
   assert.equal(
     movieQueries(urls)[0].searchParams.get("include_adult"),

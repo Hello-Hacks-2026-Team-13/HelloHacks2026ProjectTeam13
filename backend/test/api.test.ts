@@ -19,7 +19,6 @@ test("API: real pairing, private reads, three suggestions, two votes, cancellati
         ...process.env,
         PORT: String(port),
         APP_MODE: "demo",
-        TOKEN_ENCRYPTION_KEY: "",
         NODE_ENV: "test",
         DEMO_DATA_DIR: dir,
         TMDB_READ_ACCESS_TOKEN: "",

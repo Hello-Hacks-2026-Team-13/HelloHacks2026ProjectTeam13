@@ -131,16 +131,6 @@ export default function TimeScreen() {
           Save preferences
         </Button>
       </Card>
-      <Card>
-        <Heading>Keep calendars in the loop</Heading>
-        <Body>
-          Google Calendar busy times can also block suggestions. Connect or
-          manage it from Connections.
-        </Body>
-        <Button kind="quiet" onPress={() => router.push("/connections")}>
-          Calendar connections
-        </Button>
-      </Card>
     </Screen>
   );
 }

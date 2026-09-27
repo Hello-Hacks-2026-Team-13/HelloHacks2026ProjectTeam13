@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { DateTime } from "luxon";
-import type { Activity, Room, Slot, Offer } from "../../shared/types.ts";
+import type { Activity, Room, Offer } from "../../shared/types.ts";
 import { findSlots } from "./domain.ts";
 async function tmdb(path: string) {
   const response = await fetch(`https://api.themoviedb.org/3${path}`, {
@@ -32,6 +32,38 @@ async function externalJson<T>(url: URL, provider: string): Promise<T> {
   }
 }
 
+function titleKey(activity: Activity) {
+  const title = activity.title
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("en-US");
+  return `title:${activity.kind}:${title}`;
+}
+
+function wasSeen(activity: Activity, seen: Set<string>) {
+  return (
+    seen.has(activity.id) ||
+    ((activity.kind === "movie" || activity.kind === "game") &&
+      seen.has(titleKey(activity)))
+  );
+}
+
+function rememberActivity(activity: Activity, seen: Set<string>) {
+  seen.add(activity.id);
+  if (activity.kind === "movie" || activity.kind === "game")
+    seen.add(titleKey(activity));
+}
+
+function shuffled<T>(items: T[]) {
+  const result = [...items];
+  for (let index = result.length - 1; index > 0; index--) {
+    const swapWith = randomInt(index + 1);
+    [result[index], result[swapWith]] = [result[swapWith], result[index]];
+  }
+  return result;
+}
+
 async function movies(
   room: Room,
   seen: Set<string>,
@@ -57,7 +89,18 @@ async function movies(
       );
       const candidates = await Promise.all(
         (result.results || [])
-          .filter((movie: any) => !checked.has(`tmdb-${movie.id}`))
+          .filter(
+            (movie: any) =>
+              !checked.has(`tmdb-${movie.id}`) &&
+              !wasSeen(
+                {
+                  id: `tmdb-${movie.id}`,
+                  title: movie.title,
+                  kind: "movie",
+                } as Activity,
+                seen,
+              ),
+          )
           .map(async (movie: any) => {
             checked.add(`tmdb-${movie.id}`);
             const [details, providers] = await Promise.all([
@@ -94,7 +137,7 @@ async function movies(
           }),
       );
       const eligible = candidates.filter((v): v is Activity => v !== null);
-      if (eligible.length) return eligible;
+      if (eligible.length) return shuffled(eligible);
       if (!result.results?.length || page >= (result.total_pages || 1)) break;
     }
   }
@@ -127,7 +170,17 @@ async function games(seen: Set<string>): Promise<Activity[]> {
       next?: string | null;
     }>(url, "RAWG");
     const eligible = (result.results || [])
-      .filter((game) => !seen.has(`rawg-${game.id}`))
+      .filter(
+        (game) =>
+          !wasSeen(
+            {
+              id: `rawg-${game.id}`,
+              title: game.name,
+              kind: "game",
+            } as Activity,
+            seen,
+          ),
+      )
       .map((game): Activity => ({
         id: `rawg-${game.id}`,
         title: game.name,
@@ -147,7 +200,7 @@ async function games(seen: Set<string>): Promise<Activity[]> {
         poster: game.background_image || undefined,
         url: `https://rawg.io/games/${encodeURIComponent(game.slug)}`,
       }));
-    if (eligible.length) return eligible;
+    if (eligible.length) return shuffled(eligible);
     if (!result.next) break;
   }
   return [];
@@ -201,11 +254,11 @@ async function mealIdeas(seen: Set<string>): Promise<Activity[]> {
 
 // Includes legacy offers/plans so deployment does not immediately repeat them.
 export function seenActivities(room: Room) {
-  return new Set([
-    ...(room.suggestionHistory || []),
-    ...room.offers.map((o) => o.activity.id),
-    ...room.plans.map((p) => p.activity.id),
-  ]);
+  const seen = new Set(room.suggestionHistory || []);
+  [...room.offers, ...room.plans].forEach((entry) =>
+    rememberActivity(entry.activity, seen),
+  );
+  return seen;
 }
 
 function selectionVersion(room: Room) {
@@ -236,12 +289,12 @@ export function commitSuggestions(
     !["movie", "game", "meal"].every((kind) =>
       offers.some((o) => o.activity.kind === kind),
     ) ||
-    offers.some((o) => seen.has(o.activity.id))
+    offers.some((o) => wasSeen(o.activity, seen))
   )
     throw new Error(
       "Could not create a completely new set. Your previous ideas are unchanged.",
     );
-  offers.forEach((o) => seen.add(o.activity.id));
+  offers.forEach((o) => rememberActivity(o.activity, seen));
   current.suggestionHistory = [...seen];
   current.offers = offers;
 }
@@ -260,28 +313,29 @@ function demoIdeas(
     ],
     meal: ["A pasta night", "A taco night", "A homemade pizza night"],
   };
-  return themes[kind]
-    .map((title, index): Activity => ({
-      id: `demo-${kind}-${index}`,
-      title,
-      kind,
-      source: "demo",
-      minutes: kind === "movie" ? 90 : kind === "game" ? 60 : 90,
-      subtitle: "Demo idea · not a live provider recommendation",
-      description:
-        "A sample for trying the shared planning flow. Configure the provider to discover specific titles or recipes.",
-    }))
-    .filter((a) => !seen.has(a.id));
+  return shuffled(
+    themes[kind]
+      .map((title, index): Activity => ({
+        id: `demo-${kind}-${index}`,
+        title,
+        kind,
+        source: "demo",
+        minutes: kind === "movie" ? 90 : kind === "game" ? 60 : 90,
+        subtitle: "Demo idea · not a live provider recommendation",
+        description:
+          "A sample for trying the shared planning flow. Configure the provider to discover specific titles or recipes.",
+      }))
+      .filter((activity) => !seen.has(activity.id)),
+  );
 }
 
-export async function suggest(room: Room, busy: Slot[], demo: boolean) {
+export async function suggest(room: Room, demo: boolean) {
   if (room.profiles.length !== 2)
     throw new Error("Pair with your partner first.");
   const max = Math.min(...room.profiles.map((p) => p.duration));
-  const blocked = [
-    ...busy,
-    ...room.plans.filter((p) => p.status !== "cancelled").map((p) => p.slot),
-  ];
+  const blocked = room.plans
+    .filter((p) => p.status !== "cancelled")
+    .map((p) => p.slot);
   const now = DateTime.utc();
   const slotFor = (minutes: number) =>
     findSlots(room.profiles, blocked, minutes, now, 1)[0];
@@ -305,7 +359,7 @@ export async function suggest(room: Room, busy: Slot[], demo: boolean) {
     }
     const conflicts = findSlots(room.profiles, [], 90, now, 1).length > 0;
     const reason = conflicts
-      ? "Calendar conflicts or existing plans reduce your shared free time"
+      ? "Existing plans reduce your shared free time"
       : "Your saved hours and days, compared across both time zones, overlap";
     throw new Error(
       `${reason} for at most ${available} minutes in the next 7 days. A full set needs 90 minutes together. Date length does not extend your available hours. ${conflicts ? "Review conflicts or choose wider hours" : "Adjust your hours or days"} in Our time and save preferences. Your previous ideas are unchanged.`,
@@ -343,7 +397,7 @@ export async function suggest(room: Room, busy: Slot[], demo: boolean) {
       return;
     }
     const activity = result.value.find(
-      (a) => !seen.has(a.id) && a.minutes <= max && slotFor(a.minutes),
+      (a) => !wasSeen(a, seen) && a.minutes <= max && slotFor(a.minutes),
     );
     if (!activity)
       missing.push(`no unseen suitable ${names[index]} found in this search`);

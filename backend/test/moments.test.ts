@@ -108,7 +108,6 @@ test("retention worker deletes expired photo bytes and reactions without a page 
   const { randomUUID } = await import("node:crypto");
   const directory = await mkdtemp(join(tmpdir(), "across-retention-"));
   process.env.APP_MODE = "demo";
-  process.env.TOKEN_ENCRYPTION_KEY = "";
   process.env.DEMO_DATA_DIR = directory;
   const store = await import("../src/store.ts");
   const storage = await import("../src/moment-storage.ts");
