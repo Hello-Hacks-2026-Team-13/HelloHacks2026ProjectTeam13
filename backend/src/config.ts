@@ -14,7 +14,11 @@ try {
     "RAWG_API_KEY",
     "THEMEALDB_API_KEY",
   ]) {
-    if (!process.env[key]?.trim() && legacyApiSettings[key]?.trim())
+    if (
+      process.env.NODE_ENV !== "test" &&
+      !process.env[key]?.trim() &&
+      legacyApiSettings[key]?.trim()
+    )
       process.env[key] = legacyApiSettings[key].trim();
   }
 } catch {

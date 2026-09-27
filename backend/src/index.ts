@@ -40,7 +40,7 @@ import {
   disconnectCalendar,
   calendarBusy,
 } from "./calendar.ts";
-import { suggest } from "./activities.ts";
+import { suggest, commitSuggestions } from "./activities.ts";
 import type { Room } from "../../shared/types.ts";
 import momentsRouter from "./moments.ts";
 import { startMomentCleanup, deleteMomentFiles } from "./moment-storage.ts";
@@ -317,9 +317,7 @@ app.post("/api/suggestions", async (_req, res) => {
     throw new Error("Pair with your partner first.");
   const result = await suggest(room, await calendarBusy(room), !live);
   await mutateRoom(res.locals.userId, (current) => {
-    if (JSON.stringify(current.profiles) !== JSON.stringify(room.profiles))
-      throw new Error("Preferences changed while searching. Try again.");
-    current.offers = result.offers;
+    commitSuggestions(current, room, result.offers);
   });
   res.json(result);
 });

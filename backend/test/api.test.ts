@@ -23,6 +23,7 @@ test("API: real pairing, private reads, three suggestions, two votes, cancellati
         NODE_ENV: "test",
         DEMO_DATA_DIR: dir,
         TMDB_READ_ACCESS_TOKEN: "",
+        RAWG_API_KEY: "",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -139,14 +140,28 @@ test("API: real pairing, private reads, three suggestions, two votes, cancellati
     await call("/preferences", a, "PUT", {
       profile: { ...profile, duration: 30 },
     });
-    const shortIdeas = (await call("/suggestions", a, "POST")).data.offers;
-    assert.equal(shortIdeas.length, 3);
-    assert.ok(
-      shortIdeas.every(
-        (offer: { activity: { minutes: number } }) =>
-          offer.activity.minutes <= 30,
-      ),
-    );
+    const shortIdeas = await call("/suggestions", a, "POST");
+    assert.equal(shortIdeas.status, 409);
+    assert.match(shortIdeas.data.error, /90-minute/);
+    await call("/preferences", a, "PUT", { profile });
+    const allSeen = new Set(ideas.data.offers.map((o: any) => o.activity.id));
+    for (let rotation = 0; rotation < 2; rotation++) {
+      const next = await call("/suggestions", b, "POST");
+      assert.equal(next.status, 200);
+      assert.deepEqual(
+        next.data.offers.map((o: any) => o.activity.kind).sort(),
+        ["game", "meal", "movie"],
+      );
+      for (const offer of next.data.offers) {
+        assert.ok(!allSeen.has(offer.activity.id));
+        allSeen.add(offer.activity.id);
+      }
+      await stop();
+      await start();
+    }
+    const previous = (await call("/state", a)).data.room.offers;
+    assert.equal((await call("/suggestions", a, "POST")).status, 409);
+    assert.deepEqual((await call("/state", a)).data.room.offers, previous);
     assert.equal(
       (
         await call("/preferences", a, "PUT", {

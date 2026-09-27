@@ -20,7 +20,7 @@ For a physical phone, copy `frontend/.env.example` to `frontend/.env` and set `E
 1. Enter a name and create a space.
 2. Choose **Add demo partner** from the home screen or Connections, or join with the invite code from another client.
 3. Edit **Our time** for your time zone, available weekdays/hours, movie genres, country, and maximum date length. In demo mode, **Our time** also lets you edit the sample partner's hours.
-4. Choose **Find our next date**. Each of the three suggestions includes a time that fits the whole activity.
+4. Choose **Find our next date** for one movie, one online co-op game, and one recipe. Choose **Show different ideas** to replace all three with unseen picks. Each suggestion includes a time that fits the whole activity; allow at least a 90-minute shared window.
 5. Suggest a date. Your suggestion counts as your acceptance.
 6. Use **Demo: Alex says yes**, or accept from the other browser profile. Only then does the plan become saved.
 7. Export a saved plan as an `.ics` calendar file or share its details.
@@ -86,8 +86,8 @@ Curated conversation/creative activities fill remaining slots. TMDB outages show
 ### 4. RAWG and TheMealDB: game and recipe ideas
 
 - Get a RAWG key from [RAWG API docs](https://rawg.io/apidocs) and set `RAWG_API_KEY` in `backend/.env`. The server requests highly rated games tagged for online co-op and adds a link back to RAWG. Follow RAWG's current plan, request limits, and attribution terms.
-- TheMealDB's free developer test key is `1`, so `THEMEALDB_API_KEY=1` works for local development. Replace it with a supporter key if you have one. The server requests one random recipe and links to its recipe/source page.
-- Both services are called only by the backend; keys are not sent to the app. If RAWG isn't configured or a provider is unavailable, the app keeps the other provider results and curated ideas.
+- TheMealDB's free developer test key is `1`, so `THEMEALDB_API_KEY=1` works for local development. Replace it with a supporter key if you have one. The server requests a random recipe, retries up to five times if it has already been shown, and links to its recipe/source page.
+- Both services are called only by the backend; keys are not sent to the app. A refresh succeeds only when all three new categories are available. Provider errors, exhausted search results, or incompatible schedules leave the existing set unchanged and show an explanation. Credential-free demo mode includes three clearly labeled sample sets.
 - Game ideas reserve 60 minutes and recipe ideas reserve 90 minutes in the shared schedule. Check the game platforms and recipe preparation time before confirming a date.
 
 The relevant settings are in the optional integration section of `backend/.env.example`. Copy it to `backend/.env` if you haven't already, add `RAWG_API_KEY`, and keep `THEMEALDB_API_KEY=1` or replace it with your supporter key. Restart the backend after editing the file. See the [RAWG API docs](https://rawg.io/apidocs) and [TheMealDB API guide](https://www.themealdb.com/docs_api_guide.php) for current access details.
@@ -119,7 +119,7 @@ backend/src/index.ts       Authenticated Express API and OAuth callback
 backend/src/domain.ts      Availability matching and acceptance rules
 backend/src/store.ts       Local persistence and Supabase storage
 backend/src/calendar.ts    Google OAuth, encrypted tokens, and free/busy reads
-backend/src/activities.ts  TMDB, RAWG, TheMealDB, and curated date ideas
+backend/src/activities.ts  TMDB, RAWG, TheMealDB, and persistent non-repeating sets
 backend/test/              Unit and API integration tests
 supabase/schema.sql        Database setup and private access rules
 supabase/pair_removal.sql  Pair removal and solo-space replacement
@@ -155,3 +155,11 @@ After reveal, each partner can leave one editable emoji/message (up to 240 chara
 **Device setup:** the Expo image-picker plugin supplies camera/photo permission descriptions without microphone access. Native development builds must be rebuilt to include the added module. The picker is also supported on web; camera availability depends on the device/browser. `expo-image-picker` is pinned to SDK 57 patch `57.0.19` because the newer recommended patch was excluded by the local npm release-age policy during installation.
 
 **Verification:** `npm test` includes image validation/replacement, owner-only previews, partner/outsider denial, no pre-reveal reactions, one-sided reveal, message limits, pairing removal, prompt rotation, timezone/date-line/DST boundaries, and exact access expiry. Live Supabase storage and physical-device camera permission flows require project/device testing.
+
+### Rotating date ideas
+
+A shared `suggestionHistory` in the existing room JSON stores the IDs of every successfully displayed recommendation. Refreshes also exclude legacy offers and plans. History survives page reloads, API restarts, profile edits, and switching between partners; it lasts for the lifetime of that shared space. There is no automatic history reset or repeat fallback. No SQL migration or new credentials are required.
+
+All ideas contains exactly one movie, one game, and one recipe. Category tabs filter this trio. Movie selection retains shared genres, actual runtime, and watch options in both countries. Games reserve 60 minutes and recipes 90 minutes; recipe times are session estimates. Each activity must fit a shared free window, including calendar conflicts and existing plans. For bounded provider work, each search checks up to five movie/game result pages and five random recipe responses. A search may fail before the provider's full catalog is exhausted; the UI reports that no complete fresh set was found in that search rather than repeating an item.
+
+The three offers and their history commit together. Concurrent partner changes to preferences, plans, or suggestions reject the stale search; the person can retry against the updated space. Failed searches neither replace the old set nor consume unseen candidates. Provider-backed tests use mocked responses; API integration tests use credential-free samples and never read optional `apis.env` provider keys when `NODE_ENV=test`.

@@ -30,6 +30,7 @@ export type Plan = Offer & {
   createdBy: string;
 };
 export type Room = {
+  suggestionHistory?: string[];
   moments?: MomentSchedule;
   id: string;
   profiles: Profile[];

@@ -21,7 +21,6 @@ const filters = [
   { id: "movie", label: "Movies" },
   { id: "game", label: "Games" },
   { id: "meal", label: "Recipes" },
-  { id: "together", label: "Little moments" },
 ] as const;
 
 type Filter = (typeof filters)[number]["id"];
@@ -38,11 +37,6 @@ export default function IdeasScreen() {
   const offers = room?.offers || [];
   const filtered = offers.filter((offer) => {
     if (filter === "all") return true;
-    if (filter === "together")
-      return (
-        offer.activity.kind === "conversation" ||
-        offer.activity.kind === "creative"
-      );
     return offer.activity.kind === filter;
   });
 
@@ -53,6 +47,7 @@ export default function IdeasScreen() {
         "POST",
       );
       setProviderNotice(response.notice);
+      setFilter("all");
       return response;
     }, "Fresh date ideas are ready.");
 
@@ -60,7 +55,7 @@ export default function IdeasScreen() {
     <Screen
       eyebrow="Date ideas"
       title="Something more than ‘what should we do?’"
-      description="Ideas start with the time you share, then draw from movies, games, recipes, and simple ways to connect."
+      description="One movie, one game, and one recipe that fit your shared time."
     >
       {error ? (
         <Notice tone="error">
@@ -95,8 +90,12 @@ export default function IdeasScreen() {
               Find a shared moment
             </Heading>
             <Button busy={busy} onPress={findIdeas}>
-              Find our next date
+              {offers.length ? "Show different ideas" : "Find our next date"}
             </Button>
+            <Body>
+              Each new set replaces all three ideas. We remember what this space
+              has already seen, including after reloading.
+            </Body>
           </Card>
           <View style={styles.filters}>
             {filters.map((item) => (
@@ -128,12 +127,12 @@ export default function IdeasScreen() {
               <Heading>
                 {offers.length
                   ? "No ideas in this category yet."
-                  : "No shared window found yet."}
+                  : "Find your first three ideas."}
               </Heading>
               <Body>
                 {offers.length
-                  ? "Choose another category, or refresh for a different mix."
-                  : "Try wider hours or a shorter date in Our time. You can also send a photo prompt from your space."}
+                  ? "Choose All ideas or request a fresh set."
+                  : "Choose Find our next date to get a movie, game, and recipe. Allow at least 90 minutes together in Our time."}
               </Body>
               <Button kind="secondary" onPress={() => router.push("/time")}>
                 Adjust availability
@@ -189,7 +188,7 @@ function OfferCard({
         </Text>
         <Text style={styles.tz}>
           {activity.source === "demo"
-            ? "Sample movie idea"
+            ? "Sample date idea"
             : sourceLabel(activity.source)}
         </Text>
         {activity.url ? (
