@@ -1,7 +1,7 @@
 import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { suggest, commitSuggestions } from "../src/activities.ts";
-import { defaultProfile } from "../src/domain.ts";
+import { defaultProfile, profileInput } from "../src/domain.ts";
 import type { Room } from "../../shared/types.ts";
 function room(): Room {
   return {
@@ -420,6 +420,27 @@ test("different game tastes use Action OR Adventure OR Puzzle and retain online 
     ),
   );
   assert.equal(movieQueries(urls)[0].searchParams.get("with_genres"), "35");
+});
+
+test("new movie and game genres validate and drive shared-preference searches", async (t) => {
+  const urls = providers(t);
+  const state = room();
+  state.profiles[0].genres = [27, 28];
+  state.profiles[1].genres = [27, 14];
+  state.profiles[0].gameGenres = [28, 19];
+  state.profiles[1].gameGenres = [28, 17, 11];
+
+  assert.deepEqual(
+    profileInput.parse(state.profiles[0]).genres,
+    [27, 28],
+  );
+  assert.deepEqual(
+    profileInput.parse(state.profiles[0]).gameGenres,
+    [28, 19],
+  );
+  await suggest(state, false);
+  assert.equal(movieQueries(urls)[0].searchParams.get("with_genres"), "27");
+  assert.equal(gameQueries(urls)[0].searchParams.get("genres"), "28");
 });
 
 test("shared game genres stay first even when only a later page has an unseen game", async (t) => {

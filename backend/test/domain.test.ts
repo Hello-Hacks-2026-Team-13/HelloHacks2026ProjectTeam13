@@ -172,7 +172,7 @@ test("game preferences accept supported genres, deduplicate, and default legacy 
     [4.5],
     ["4"],
     null,
-    [4, 3, 7, 5, 10, 14, 4],
+    [4, 3, 7, 5, 10, 14, 28, 19, 17, 11, 4],
   ]) {
     assert.equal(
       profileInput.safeParse({ ...first, gameGenres }).success,

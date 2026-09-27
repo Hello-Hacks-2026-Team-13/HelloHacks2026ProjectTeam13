@@ -2,19 +2,9 @@ import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { Profile } from "../../../shared/types";
 import { GAME_GENRES } from "../../../shared/game-genres";
+import { MOVIE_GENRES } from "../../../shared/movie-genres";
 import { Chip, Field, Heading, palette } from "./across-ui";
 import { formatTimezone, parseTimezone } from "@/lib/timezone";
-
-export const GENRES = [
-  { id: 35, label: "Comedy" },
-  { id: 10749, label: "Romance" },
-  { id: 12, label: "Adventure" },
-  { id: 16, label: "Animation" },
-  { id: 18, label: "Drama" },
-  { id: 878, label: "Sci-fi" },
-  { id: 9648, label: "Mystery" },
-  { id: 99, label: "Documentary" },
-];
 
 const DAYS = [
   { id: 1, label: "Mon" },
@@ -152,7 +142,7 @@ export function ProfileEditor({
             Movies you enjoy
           </Heading>
           <View style={styles.chips}>
-            {GENRES.map((genre) => {
+            {MOVIE_GENRES.map((genre) => {
               const selected = value.genres.includes(genre.id);
               return (
                 <Chip
@@ -163,7 +153,7 @@ export function ProfileEditor({
                     update({
                       genres: selected
                         ? value.genres.filter((id) => id !== genre.id)
-                        : [...value.genres, genre.id].slice(0, 10),
+                        : [...value.genres, genre.id],
                     })
                   }
                 />

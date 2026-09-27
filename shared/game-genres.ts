@@ -6,4 +6,8 @@ export const GAME_GENRES = [
   { id: 5, label: "RPG" },
   { id: 10, label: "Strategy" },
   { id: 14, label: "Simulation" },
+  { id: 28, label: "Board Games" },
+  { id: 19, label: "Family" },
+  { id: 17, label: "Card" },
+  { id: 11, label: "Arcade" },
 ] as const;
