@@ -4,6 +4,7 @@ import { Image } from "expo-image";
 import { router } from "expo-router";
 import type { Offer } from "../../../shared/types";
 import { acrossApi, useAcross } from "@/lib/across";
+import { formatTimezone } from "@/lib/timezone";
 import {
   Body,
   Button,
@@ -101,7 +102,7 @@ export default function IdeasScreen() {
           </Button>
           <Body style={styles.footnote}>
             Three fresh ideas, with no repeats. Times shown in{" "}
-            {me?.timezone || "your local time"}.
+            {me ? formatTimezone(me.timezone) : "your local time"}.
           </Body>
           {filtered.length ? (
             filtered.map((offer) => (

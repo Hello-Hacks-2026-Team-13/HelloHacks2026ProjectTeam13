@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import type { Profile } from "../../../shared/types";
 import { GAME_GENRES } from "../../../shared/game-genres";
 import { Chip, Field, Heading, palette } from "./across-ui";
+import { formatTimezone, parseTimezone } from "@/lib/timezone";
 
 export const GENRES = [
   { id: 35, label: "Comedy" },
@@ -77,15 +78,17 @@ export function ProfileEditor({
         <>
           <Field
             label="Time zone"
-            value={value.timezone}
-            onChangeText={(timezone) => update({ timezone })}
-            placeholder="America/Vancouver"
+            value={formatTimezone(value.timezone)}
+            onChangeText={(timezone) =>
+              update({ timezone: parseTimezone(timezone) })
+            }
+            placeholder="America/Los Angeles"
             autoCapitalize="none"
-            accessibilityHint="Use an IANA time zone, such as America/Vancouver or Europe/London."
+            accessibilityHint="Enter your IANA time zone, for example America/Los Angeles or Europe/London."
           />
           <Text style={styles.hint}>
-            Use the IANA time zone shown by your device, for example
-            America/Vancouver.
+            Use the time zone shown by your device. Names are displayed with
+            spaces and saved in the format required for scheduling.
           </Text>
           <Field
             label="Country code"

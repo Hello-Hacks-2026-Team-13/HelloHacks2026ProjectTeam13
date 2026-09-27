@@ -25,6 +25,7 @@ import {
   palette,
 } from "@/components/across-ui";
 import { newProfile } from "@/components/profile-editor";
+import { formatTimezone } from "@/lib/timezone";
 
 export default function HomeScreen() {
   const {
@@ -322,7 +323,7 @@ export default function HomeScreen() {
               <View style={styles.profileCopy}>
                 <Text style={styles.profileName}>{me?.name || "You"}</Text>
                 <Text style={styles.profileMeta}>
-                  {me?.timezone || "Time zone not set"}
+                  {me ? formatTimezone(me.timezone) : "Time zone not set"}
                 </Text>
               </View>
               <Text style={styles.profileHours}>
@@ -337,7 +338,9 @@ export default function HomeScreen() {
               </View>
               <View style={styles.profileCopy}>
                 <Text style={styles.profileName}>{partner.name}</Text>
-                <Text style={styles.profileMeta}>{partner.timezone}</Text>
+                <Text style={styles.profileMeta}>
+                  {formatTimezone(partner.timezone)}
+                </Text>
               </View>
               <Text
                 style={styles.profileHours}

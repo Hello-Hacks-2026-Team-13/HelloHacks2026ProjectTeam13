@@ -12,6 +12,7 @@ import {
   Screen,
 } from "@/components/across-ui";
 import { ProfileEditor } from "@/components/profile-editor";
+import { formatTimezone } from "@/lib/timezone";
 
 export default function TimeScreen() {
   const { state, config, busy, error, notice, execute } = useAcross();
@@ -79,7 +80,7 @@ export default function TimeScreen() {
           </Heading>
           {[me, partner].map((profile) => (
             <Body key={profile.id}>
-              {profile.name}: {profile.timezone} ·{" "}
+              {profile.name}: {formatTimezone(profile.timezone)} ·{" "}
               {formatHour(profile.startHour)}–{formatHour(profile.endHour)}
               {` · date length: up to ${profile.duration / 60} hours`}
             </Body>

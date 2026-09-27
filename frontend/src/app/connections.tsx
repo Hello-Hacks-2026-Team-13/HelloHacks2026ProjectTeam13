@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Share, StyleSheet, Text, View } from "react-native";
+import { Share, StyleSheet, Text } from "react-native";
 import { router } from "expo-router";
 import { acrossApi, useAcross } from "@/lib/across";
 import {
@@ -14,6 +14,7 @@ import {
   palette,
 } from "@/components/across-ui";
 import { newProfile } from "@/components/profile-editor";
+import { formatTimezone } from "@/lib/timezone";
 
 export default function ConnectionsScreen() {
   const {
@@ -122,12 +123,12 @@ export default function ConnectionsScreen() {
         </Heading>
         {me ? (
           <Body>
-            {me.name} · {me.timezone}
+            {me.name} · {formatTimezone(me.timezone)}
           </Body>
         ) : null}
         {partner ? (
           <Body>
-            {partner.name} · {partner.timezone}
+            {partner.name} · {formatTimezone(partner.timezone)}
           </Body>
         ) : null}
         {room && !paired ? (
@@ -236,30 +237,6 @@ export default function ConnectionsScreen() {
         </Card>
       ) : null}
 
-      <Card>
-        <Heading detail="Provider credentials stay on the backend; they are never sent to the app.">
-          Suggestion sources
-        </Heading>
-        <StatusLine
-          label="TMDB movies"
-          value={state?.tmdbReady ? "Ready" : "Not configured"}
-          positive={Boolean(state?.tmdbReady)}
-        />
-        <StatusLine
-          label="RAWG games"
-          value={state?.rawgReady ? "Ready" : "Not configured"}
-          positive={Boolean(state?.rawgReady)}
-        />
-        <StatusLine
-          label="TheMealDB recipes"
-          value={state?.mealdbReady ? "Ready" : "Not configured"}
-          positive={Boolean(state?.mealdbReady)}
-        />
-        <Body>
-          Curated conversation and creative ideas work without these providers.
-        </Body>
-      </Card>
-
       {paired ? (
         <Card style={styles.removeCard}>
           <Heading detail="Either person can remove the pairing. The shared room and all stored plans are deleted.">
@@ -344,30 +321,6 @@ export default function ConnectionsScreen() {
   );
 }
 
-function StatusLine({
-  label,
-  value,
-  positive,
-}: {
-  label: string;
-  value: string;
-  positive: boolean;
-}) {
-  return (
-    <View style={styles.statusLine}>
-      <Text style={styles.statusLabel}>{label}</Text>
-      <Text
-        style={[
-          styles.statusValue,
-          positive ? styles.statusGood : styles.statusMuted,
-        ]}
-      >
-        {value}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   invite: {
     color: palette.ink,
@@ -380,17 +333,4 @@ const styles = StyleSheet.create({
     backgroundColor: palette.paper,
   },
   removeCard: { borderColor: "#E8C7C7", backgroundColor: "#FFFBFA" },
-  statusLine: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    minHeight: 34,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.line,
-    gap: 12,
-  },
-  statusLabel: { color: palette.ink, fontSize: 14, fontWeight: "600" },
-  statusValue: { fontSize: 13, fontWeight: "700" },
-  statusGood: { color: palette.green },
-  statusMuted: { color: palette.muted },
 });

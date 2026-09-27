@@ -23,6 +23,7 @@ import {
   palette,
 } from "@/components/across-ui";
 import { MOMENT_EMOJIS } from "../../../shared/moments";
+import { formatTimezone } from "@/lib/timezone";
 import type {
   MomentPhotoView,
   MomentRoundView,
@@ -273,7 +274,9 @@ function MomentContent() {
             <Heading>A moment, not an archive</Heading>
             <Body>
               Photos reveal at 9 pm in{" "}
-              {data?.zone || "the earlier partner’s timezone"}. You have 24
+              {data?.zone
+                ? formatTimezone(data.zone)
+                : "the earlier partner’s timezone"}. You have 24
               hours to view and react while the next prompt runs. Photos and
               messages then disappear and are automatically deleted. Saving a
               photo outside Across is outside this timer.
