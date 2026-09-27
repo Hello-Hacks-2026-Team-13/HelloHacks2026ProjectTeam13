@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Linking, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import type { Offer } from "../../../shared/types";
@@ -8,7 +8,6 @@ import {
   Body,
   Button,
   Card,
-  Chip,
   Heading,
   Notice,
   NoticeText,
@@ -16,18 +15,16 @@ import {
   palette,
 } from "@/components/across-ui";
 
-const filters = [
-  { id: "all", label: "All ideas" },
-  { id: "movie", label: "Movies" },
-  { id: "game", label: "Games" },
-  { id: "meal", label: "Recipes" },
-] as const;
-
-type Filter = (typeof filters)[number]["id"];
+import {
+  CategoryFilters,
+  DiscoveryTiles,
+  type IdeaFilter,
+} from "@/components/figma-ui";
+import { fontFamily } from "@/constants/design";
 
 export default function IdeasScreen() {
   const { state, busy, error, notice, execute } = useAcross();
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<IdeaFilter>("all");
   const [providerNotice, setProviderNotice] = useState("");
   const room = state?.room;
   const me = room?.profiles.find((profile) => profile.id === state?.userId);
@@ -52,11 +49,7 @@ export default function IdeasScreen() {
     }, "Fresh date ideas are ready.");
 
   return (
-    <Screen
-      eyebrow="Date ideas"
-      title="Something more than ‘what should we do?’"
-      description="One movie, one game, and one recipe that fit your shared time."
-    >
+    <Screen adornment="brain" title="Plan Your Next Date">
       {error ? (
         <Notice tone="error">
           <NoticeText>{error}</NoticeText>
@@ -83,30 +76,33 @@ export default function IdeasScreen() {
         </Card>
       ) : (
         <>
-          <Card>
-            <Heading
-              detail={`Your next ideas will fit both schedules. Times shown for ${me?.name || "you"} use ${me?.timezone || "your local time"}.`}
-            >
-              Find a shared moment
-            </Heading>
-            <Button busy={busy} onPress={findIdeas}>
-              {offers.length ? "Show different ideas" : "Find our next date"}
-            </Button>
-            <Body>
-              Each new set replaces all three ideas. We remember what this space
-              has already seen, including after reloading.
-            </Body>
-          </Card>
-          <View style={styles.filters}>
-            {filters.map((item) => (
-              <Chip
-                key={item.id}
-                label={item.label}
-                selected={filter === item.id}
-                onPress={() => setFilter(item.id)}
-              />
-            ))}
-          </View>
+          <CategoryFilters value={filter} onChange={setFilter} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Schedule: edit our available hours"
+            onPress={() => router.push("/time")}
+            style={styles.schedule}
+          >
+            <Text style={styles.scheduleTitle}>
+              Schedule <Text style={styles.arrow}>↗</Text>
+            </Text>
+            <Text style={styles.scheduleDetail}>
+              Our time · Find hours that work for both of you
+            </Text>
+          </Pressable>
+          {filter === "all" ? (
+            <DiscoveryTiles onGames={() => setFilter("game")} />
+          ) : null}
+          <Heading detail="One movie, one game, and one recipe that fit your shared time.">
+            Picked for you
+          </Heading>
+          <Button busy={busy} onPress={findIdeas}>
+            {offers.length ? "Show different ideas" : "Find our next date"}
+          </Button>
+          <Body style={styles.footnote}>
+            Three fresh ideas, with no repeats. Times shown in{" "}
+            {me?.timezone || "your local time"}.
+          </Body>
           {filtered.length ? (
             filtered.map((offer) => (
               <OfferCard
@@ -139,6 +135,7 @@ export default function IdeasScreen() {
               </Button>
             </Card>
           )}
+
           <Body style={styles.footnote}>
             A suggestion includes your acceptance. Your partner confirms next.
             Movie availability may require a subscription or rental.
@@ -249,18 +246,32 @@ function formatTime(value: string, timezone: string) {
 }
 
 const styles = StyleSheet.create({
-  filters: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  offerCard: { padding: 12, overflow: "hidden" },
+  schedule: {
+    backgroundColor: palette.peach,
+    borderRadius: 10,
+    minHeight: 95,
+    padding: 18,
+    justifyContent: "space-between",
+  },
+  scheduleTitle: {
+    fontFamily,
+    color: palette.ink,
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  arrow: { color: palette.coralDark },
+  scheduleDetail: { fontFamily, color: "#5A6175", fontSize: 12, marginTop: 20 },
+  offerCard: { padding: 0, overflow: "hidden" },
   poster: {
     width: "100%",
     aspectRatio: 16 / 9,
-    borderRadius: 14,
+    borderRadius: 10,
     backgroundColor: palette.bluePale,
   },
   posterFallback: {
     width: "100%",
     height: 104,
-    borderRadius: 14,
+    borderRadius: 10,
     backgroundColor: palette.coralPale,
     alignItems: "center",
     justifyContent: "center",
@@ -271,7 +282,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 1.6,
   },
-  offerContent: { padding: 6, gap: 11 },
+  offerContent: { padding: 20, gap: 11 },
   kind: {
     color: palette.blue,
     fontSize: 12,

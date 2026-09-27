@@ -138,7 +138,8 @@ function MomentContent() {
 
   return (
     <Screen
-      eyebrow="A small piece of your day"
+      hero="morning"
+      eyebrow="Check-in"
       title="Our daily moment"
       description="One prompt. A photo each. Something to look forward to."
     >
@@ -177,11 +178,13 @@ function MomentContent() {
             </Button>
           ) : null}
           {current ? (
-            <Card style={styles.prompt}>
-              <Text style={styles.eyebrow}>TODAY’S PROMPT</Text>
-              <Text accessibilityRole="header" style={styles.promptText}>
-                {current.prompt}
-              </Text>
+            <Card>
+              <View style={styles.prompt}>
+                <Text style={styles.eyebrow}>TODAY’S PROMPT</Text>
+                <Text accessibilityRole="header" style={styles.promptText}>
+                  {current.prompt}
+                </Text>
+              </View>
               <Text style={styles.countdown}>
                 Reveals in {remaining(Date.parse(current.revealAt) - serverNow)}
               </Text>
@@ -441,24 +444,35 @@ function localTime(value: string, timezone = "UTC") {
   }).format(new Date(value));
 }
 const styles = StyleSheet.create({
-  prompt: { backgroundColor: "#F5EEE4" },
+  prompt: {
+    backgroundColor: palette.rose,
+    borderRadius: 32,
+    padding: 24,
+    gap: 16,
+  },
   eyebrow: {
-    color: palette.coralDark,
+    color: "#4C1623",
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: "700",
   },
   promptText: {
-    color: palette.ink,
-    fontSize: 29,
+    color: "#4C1623",
+    fontFamily:
+      Platform.OS === "ios"
+        ? "Georgia"
+        : Platform.OS === "web"
+          ? "Georgia, serif"
+          : "serif",
+    fontSize: 27,
     lineHeight: 37,
-    fontWeight: "600",
+    fontWeight: "400",
   },
   countdown: { color: palette.coralDark, fontSize: 18, fontWeight: "700" },
   statusRow: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   status: { color: palette.green, fontSize: 13, fontWeight: "600" },
   empty: {
-    backgroundColor: "#EEE3D6",
+    backgroundColor: palette.bluePale,
     borderRadius: 16,
     padding: 28,
     alignItems: "center",
@@ -469,7 +483,7 @@ const styles = StyleSheet.create({
     width: "100%",
     aspectRatio: 1,
     borderRadius: 14,
-    backgroundColor: "#EEE3D6",
+    backgroundColor: palette.bluePale,
   },
   section: { gap: 14 },
   emojiRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

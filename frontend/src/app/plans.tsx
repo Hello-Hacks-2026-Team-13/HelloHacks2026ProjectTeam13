@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { CategoryFilters, type IdeaFilter } from "@/components/figma-ui";
 import {
   Alert,
   Linking,
@@ -7,6 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 import { router } from "expo-router";
 import type { Plan } from "../../../shared/types";
 import { acrossApi, useAcross } from "@/lib/across";
@@ -23,19 +26,26 @@ import {
 
 export default function PlansScreen() {
   const { state, config, busy, error, notice, execute } = useAcross();
+  const [filter, setFilter] = useState<IdeaFilter>("all");
   const room = state?.room;
   const me = room?.profiles.find((profile) => profile.id === state?.userId);
   const partner = room?.profiles.find(
     (profile) => profile.id !== state?.userId,
   );
-  const plans = room?.plans.filter((plan) => plan.status !== "cancelled") || [];
+  const plans =
+    room?.plans.filter(
+      (plan) =>
+        plan.status !== "cancelled" &&
+        (filter === "all" || plan.activity.kind === filter),
+    ) || [];
 
   return (
     <Screen
-      eyebrow="Our plans"
-      title="A little anticipation looks good on you."
+      adornment="calendar"
+      title="Upcoming Dates"
       description="Suggestions become plans when both people say yes. You can always cancel or pick a new date."
     >
+      <CategoryFilters value={filter} onChange={setFilter} />
       {error ? (
         <Notice tone="error">
           <NoticeText>{error}</NoticeText>
@@ -137,86 +147,100 @@ function PlanCard({
     });
   return (
     <Card style={styles.planCard}>
-      <View style={styles.dateBadge}>
-        <Text style={styles.dateMonth}>
-          {formatMonth(plan.slot.start, timezones[0]?.timezone)}
-        </Text>
-        <Text style={styles.dateDay}>
-          {formatDay(plan.slot.start, timezones[0]?.timezone)}
-        </Text>
-      </View>
-      <View style={styles.planContent}>
-        <Text style={[styles.status, pending ? styles.pending : styles.saved]}>
-          {pending ? "WAITING FOR BOTH OF YOU" : "IT’S A DATE"}
-        </Text>
-        <Heading>{plan.activity.title}</Heading>
-        <Body>{plan.activity.subtitle}</Body>
-        <View style={styles.timeList}>
-          {timezones.map(({ name, timezone }) => (
-            <Text key={name} style={styles.timeLine}>
-              {name}: {formatDate(plan.slot.start, timezone)},{" "}
-              {formatTime(plan.slot.start, timezone)}
-            </Text>
-          ))}
+      {plan.activity.poster ? (
+        <Image
+          source={{ uri: plan.activity.poster }}
+          accessibilityLabel={`${plan.activity.title} artwork`}
+          contentFit="cover"
+          style={styles.planImage}
+        />
+      ) : null}
+      <View style={styles.planRow}>
+        <View style={styles.dateBadge}>
+          <Text style={styles.dateMonth}>
+            {formatMonth(plan.slot.start, timezones[0]?.timezone)}
+          </Text>
+          <Text style={styles.dateDay}>
+            {formatDay(plan.slot.start, timezones[0]?.timezone)}
+          </Text>
         </View>
-        <View style={styles.acceptance}>
-          {timezones.map(({ name }, index) => {
-            const accepted = plan.acceptedBy.includes(timezones[index].id);
-            return (
-              <Text key={name} style={styles.acceptanceText}>
-                {accepted ? "✓" : "○"} {name}
-                {accepted ? " said yes" : " is deciding"}
+        <View style={styles.planContent}>
+          <Text
+            style={[styles.status, pending ? styles.pending : styles.saved]}
+          >
+            {pending ? "WAITING FOR BOTH OF YOU" : "IT’S A DATE"}
+          </Text>
+          <Heading>{plan.activity.title}</Heading>
+          <Body>{plan.activity.subtitle}</Body>
+          <View style={styles.timeList}>
+            {timezones.map(({ name, timezone }) => (
+              <Text key={name} style={styles.timeLine}>
+                {name}: {formatDate(plan.slot.start, timezone)},{" "}
+                {formatTime(plan.slot.start, timezone)}
               </Text>
-            );
-          })}
+            ))}
+          </View>
+          <View style={styles.acceptance}>
+            {timezones.map(({ name }, index) => {
+              const accepted = plan.acceptedBy.includes(timezones[index].id);
+              return (
+                <Text key={name} style={styles.acceptanceText}>
+                  {accepted ? "✓" : "○"} {name}
+                  {accepted ? " said yes" : " is deciding"}
+                </Text>
+              );
+            })}
+          </View>
+          {plan.activity.url ? (
+            <Button
+              kind="quiet"
+              onPress={() => void Linking.openURL(plan.activity.url!)}
+            >
+              Open activity details
+            </Button>
+          ) : null}
+          <Button kind="secondary" onPress={sharePlan}>
+            Share plan details
+          </Button>
+          {!pending ? (
+            <Button
+              kind="quiet"
+              onPress={() =>
+                void exportPlan(plan).catch((cause: unknown) =>
+                  Alert.alert(
+                    "Calendar export unavailable",
+                    cause instanceof Error
+                      ? cause.message
+                      : "Please try again.",
+                  ),
+                )
+              }
+            >
+              Save calendar file (.ics)
+            </Button>
+          ) : null}
+          {pending && !plan.acceptedBy.includes(meId) ? (
+            <Button busy={busy} onPress={onAccept}>
+              Count me in
+            </Button>
+          ) : null}
+          {pending &&
+          demo &&
+          partnerId &&
+          !plan.acceptedBy.includes(partnerId) ? (
+            <Button busy={busy} kind="secondary" onPress={onPartnerAccept}>
+              Demo: {partnerName} says yes
+            </Button>
+          ) : null}
+          {pending && plan.acceptedBy.includes(meId) && !demo ? (
+            <Body>
+              Your answer is saved. Your partner can confirm when they’re ready.
+            </Body>
+          ) : null}
+          <Button kind="danger" disabled={busy} onPress={onCancel}>
+            Cancel plan
+          </Button>
         </View>
-        {plan.activity.url ? (
-          <Button
-            kind="quiet"
-            onPress={() => void Linking.openURL(plan.activity.url!)}
-          >
-            Open activity details
-          </Button>
-        ) : null}
-        <Button kind="secondary" onPress={sharePlan}>
-          Share plan details
-        </Button>
-        {!pending ? (
-          <Button
-            kind="quiet"
-            onPress={() =>
-              void exportPlan(plan).catch((cause: unknown) =>
-                Alert.alert(
-                  "Calendar export unavailable",
-                  cause instanceof Error ? cause.message : "Please try again.",
-                ),
-              )
-            }
-          >
-            Save calendar file (.ics)
-          </Button>
-        ) : null}
-        {pending && !plan.acceptedBy.includes(meId) ? (
-          <Button busy={busy} onPress={onAccept}>
-            Count me in
-          </Button>
-        ) : null}
-        {pending &&
-        demo &&
-        partnerId &&
-        !plan.acceptedBy.includes(partnerId) ? (
-          <Button busy={busy} kind="secondary" onPress={onPartnerAccept}>
-            Demo: {partnerName} says yes
-          </Button>
-        ) : null}
-        {pending && plan.acceptedBy.includes(meId) && !demo ? (
-          <Body>
-            Your answer is saved. Your partner can confirm when they’re ready.
-          </Body>
-        ) : null}
-        <Button kind="danger" disabled={busy} onPress={onCancel}>
-          Cancel plan
-        </Button>
       </View>
     </Card>
   );
@@ -319,7 +343,18 @@ function safeFileName(value: string) {
 }
 
 const styles = StyleSheet.create({
-  planCard: { flexDirection: "row", alignItems: "flex-start", gap: 14 },
+  planCard: { padding: 0, overflow: "hidden" },
+  planImage: {
+    width: "100%",
+    aspectRatio: 373 / 157,
+    backgroundColor: palette.bluePale,
+  },
+  planRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
+    padding: 20,
+  },
   dateBadge: {
     width: 58,
     height: 67,
