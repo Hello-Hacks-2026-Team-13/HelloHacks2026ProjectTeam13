@@ -1,8 +1,6 @@
 # Across
 
-A first draft of a long-distance relationship app: **pair accounts → set preferences and available hours → find overlap → show three activities → both accept → save the plan**.
-
-The mobile and web client is built with React Native, Expo, TypeScript, and Expo Router. The Node.js backend uses Express and TypeScript. Supabase provides live authentication and shared persistence. TMDB, RAWG, and TheMealDB provide movie, co-op game, and recipe ideas. The previous React/Vite client is kept in `frontend_old` as a reference.
+The mobile and web client is built with React Native, Expo, TypeScript, and Expo Router. The Node.js backend uses Express and TypeScript. Supabase provides live authentication and shared persistence. TMDB, RAWG, and TheMealDB provide movie, co-op game, and recipe ideas.
 
 ## Try the draft
 
