@@ -174,6 +174,7 @@ type AcrossContextValue = {
   error: string;
   notice: string;
   clearError: () => void;
+  clearMessages: () => void;
   refresh: () => Promise<void>;
   execute: <T>(
     task: () => Promise<T>,
@@ -324,6 +325,11 @@ export function AcrossProvider({ children }: PropsWithChildren) {
     if (authError) throw authError;
   }, []);
 
+  const clearMessages = useCallback(() => {
+    setError("");
+    setNotice("");
+  }, []);
+
   const execute = useCallback(
     async <T,>(
       task: () => Promise<T>,
@@ -364,6 +370,7 @@ export function AcrossProvider({ children }: PropsWithChildren) {
       error,
       notice,
       clearError: () => setError(""),
+      clearMessages,
       refresh,
       execute,
       sendMagicLink,
@@ -377,6 +384,7 @@ export function AcrossProvider({ children }: PropsWithChildren) {
       busy,
       error,
       notice,
+      clearMessages,
       refresh,
       execute,
       sendMagicLink,

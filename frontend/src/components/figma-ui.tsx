@@ -5,15 +5,15 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from "react-native";
 import { Image } from "expo-image";
-import { router } from "expo-router";
+import { router, usePathname } from "expo-router";
 import { useAcross } from "@/lib/across";
 import { artwork, fontFamily, palette } from "@/constants/design";
 
 export function PairHeader({ people = false }: { people?: boolean }) {
   const { state } = useAcross();
+  const pathname = usePathname();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60000);
@@ -35,7 +35,9 @@ export function PairHeader({ people = false }: { people?: boolean }) {
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Edit our time zones and availability"
-      onPress={() => router.push("/time")}
+      onPress={() =>
+        router.push({ pathname: "/time", params: { returnTo: pathname } })
+      }
       style={[styles.pair, people && styles.people]}
     >
       <View style={styles.person}>
@@ -212,82 +214,6 @@ export function CategoryFilters({
   );
 }
 
-export function DiscoveryTiles({ onGames }: { onGames: () => void }) {
-  const wide = useWindowDimensions().width >= 900;
-  return (
-    <View style={styles.tiles}>
-      <View style={[styles.tileColumn, wide && styles.wideColumn]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="New timezone, new idea. Edit our availability"
-          onPress={() => router.push("/time")}
-          style={[styles.timezoneTile, wide && styles.wideTile]}
-        >
-          <Image
-            source={artwork.timezone}
-            contentFit="cover"
-            style={StyleSheet.absoluteFill}
-          />
-          <Text style={styles.tileLabel}>New Timezone,{"\n"}New Idea</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open our daily moment"
-          onPress={() => router.push("/moment")}
-          style={[styles.coastTile, wide && styles.wideTile]}
-        >
-          <Image
-            source={artwork.coast}
-            contentFit="cover"
-            style={StyleSheet.absoluteFill}
-          />
-          <Text style={[styles.tileLabel, styles.darkTileLabel]}>
-            Our Daily Moment
-          </Text>
-        </Pressable>
-      </View>
-      <View
-        style={[
-          styles.tileColumn,
-          styles.rightColumn,
-          wide && styles.wideColumn,
-        ]}
-      >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Browse game ideas"
-          onPress={onGames}
-          style={[styles.gameTile, wide && styles.wideTile]}
-        >
-          <Image
-            source={artwork.games}
-            contentFit="cover"
-            style={StyleSheet.absoluteFill}
-          />
-          <Text style={[styles.tileLabel, { bottom: 8, left: 12 }]}>
-            Mini Games
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="See our upcoming plans"
-          onPress={() => router.push("/plans")}
-          style={[styles.gardenTile, wide && styles.wideTile]}
-        >
-          <Image
-            source={artwork.garden}
-            contentFit="cover"
-            style={StyleSheet.absoluteFill}
-          />
-          <Text style={[styles.tileLabel, styles.darkTileLabel]}>
-            Time Together
-          </Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   brand: {
     fontFamily,
@@ -372,46 +298,4 @@ const styles = StyleSheet.create({
   categoryImage: { width: 28, height: 28 },
   filterLabel: { fontFamily, fontSize: 16, color: palette.muted },
   filterLabelSelected: { color: palette.ink, fontWeight: "600" },
-  tiles: { flexDirection: "row", gap: 20, marginTop: 3 },
-  tileColumn: { flex: 1, gap: 14 },
-  wideColumn: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingTop: 0,
-    gap: 20,
-  },
-  wideTile: { flex: 1 },
-  rightColumn: { flex: 1.18, paddingTop: 28, gap: 24 },
-  timezoneTile: {
-    aspectRatio: 155 / 229,
-    borderRadius: 27,
-    overflow: "hidden",
-    backgroundColor: "#10064D",
-  },
-  gameTile: {
-    aspectRatio: 205 / 147,
-    borderRadius: 27,
-    overflow: "hidden",
-    backgroundColor: "#C9E6FC",
-  },
-  coastTile: { aspectRatio: 176 / 167, borderRadius: 14, overflow: "hidden" },
-  gardenTile: { aspectRatio: 176 / 210, borderRadius: 14, overflow: "hidden" },
-  tileLabel: {
-    position: "absolute",
-    bottom: 15,
-    left: 20,
-    right: 10,
-    color: "#FFF",
-    fontFamily,
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: "700",
-  },
-  darkTileLabel: {
-    color: "#3F414E",
-    backgroundColor: "#FFFFFFCC",
-    padding: 6,
-    borderRadius: 8,
-    left: 10,
-  },
 });

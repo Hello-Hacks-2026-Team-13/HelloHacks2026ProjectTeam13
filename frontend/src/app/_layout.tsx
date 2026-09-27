@@ -8,7 +8,7 @@ import { AcrossProvider, useAcross } from "@/lib/across";
 import { palette } from "@/components/across-ui";
 
 function AppNavigation() {
-  const { config, authenticated, loading } = useAcross();
+  const { config, authenticated, loading, clearMessages } = useAcross();
   const insets = useSafeAreaInsets();
   if (loading || (config?.mode === "live" && !authenticated)) {
     return (
@@ -22,6 +22,9 @@ function AppNavigation() {
     <>
       <StatusBar style="dark" />
       <Tabs
+        screenListeners={{
+          tabPress: () => clearMessages(),
+        }}
         screenOptions={{
           headerShown: false,
           tabBarActiveTintColor: palette.coral,

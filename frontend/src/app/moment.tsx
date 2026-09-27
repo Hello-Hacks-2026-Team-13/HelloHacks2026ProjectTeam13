@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { acrossApi, uploadMomentPhoto, useAcross } from "@/lib/across";
 import {
   Body,
@@ -42,11 +42,11 @@ export default function MomentScreen() {
 function MomentContent() {
   const { state, authenticated, busy, execute, error, notice } = useAcross();
   const [data, setData] = useState<MomentsView | null>(null);
-  const [revealTimeDraft, setRevealTimeDraft] = useState<string | null>(null);
   const [problem, setProblem] = useState("");
   const [picking, setPicking] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [offset, setOffset] = useState(0);
+  useFocusEffect(useCallback(() => () => setProblem(""), []));
   const room = state?.room;
   const paired = authenticated && room?.profiles.length === 2;
   const userId = state?.userId || "";
@@ -58,21 +58,6 @@ function MomentContent() {
     setData(next);
     setProblem("");
   }, []);
-  const revealTime = revealTimeDraft ?? data?.revealTime ?? "";
-  const saveRevealTime = () => {
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(revealTime)) {
-      setProblem("Enter a reveal time in 24-hour format, such as 21:00.");
-      return;
-    }
-    void execute(async () => {
-      const next = await acrossApi<MomentsView>("/moments/settings", "PUT", {
-        revealTime,
-      });
-      setData(next);
-      setOffset(Date.parse(next.serverNow) - Date.now());
-      setRevealTimeDraft(null);
-    }, "Daily reveal time saved.");
-  };
   useEffect(() => {
     if (!paired) return;
     let active = true;
@@ -193,32 +178,6 @@ function MomentContent() {
             >
               Try again
             </Button>
-          ) : null}
-          {data ? (
-            <Card>
-              <Heading detail="The daily prompt opens 12 hours before the photos reveal.">
-                Daily photo reveal time
-              </Heading>
-              <Field
-                label={`Reveal time in ${formatTimezone(data.zone)} (24-hour)`}
-                value={revealTime}
-                onChangeText={setRevealTimeDraft}
-                placeholder="21:00"
-                maxLength={5}
-                accessibilityHint="Enter the daily photo reveal time in 24-hour HH:MM format."
-              />
-              <Body>
-                A prompt that has already opened keeps its scheduled reveal
-                time. Changes apply to the next unopened prompt.
-              </Body>
-              <Button
-                busy={busy}
-                disabled={revealTime === data.revealTime}
-                onPress={saveRevealTime}
-              >
-                Save reveal time
-              </Button>
-            </Card>
           ) : null}
           {current ? (
             <Card>

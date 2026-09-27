@@ -306,7 +306,12 @@ export default function HomeScreen() {
               </ScrollView>
             </View>
           ) : null}
-          <Button kind="quiet" onPress={() => router.push("/time")}>
+          <Button
+            kind="quiet"
+            onPress={() =>
+              router.push({ pathname: "/time", params: { returnTo: "/" } })
+            }
+          >
             Our time · Edit availability
           </Button>
 

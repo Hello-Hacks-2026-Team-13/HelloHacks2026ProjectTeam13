@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import type { Profile } from "../../../shared/types";
 import { acrossApi, useAcross } from "@/lib/across";
 import {
@@ -15,6 +15,7 @@ import { ProfileEditor } from "@/components/profile-editor";
 import { formatTimezone } from "@/lib/timezone";
 
 export default function TimeScreen() {
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const { state, config, busy, error, notice, execute } = useAcross();
   const room = state?.room;
   const me = room?.profiles.find((profile) => profile.id === state?.userId);
@@ -47,14 +48,21 @@ export default function TimeScreen() {
 
   const save = () => {
     if (!draft) return;
-    void execute(
-      () =>
-        acrossApi("/preferences", "PUT", {
-          profile: draft,
-          asPartner: editingPartner,
-        }),
-      "Preferences saved. New suggestions will use these settings.",
-    );
+    void (async () => {
+      const saved = await execute(
+        () =>
+          acrossApi("/preferences", "PUT", {
+            profile: draft,
+            asPartner: editingPartner,
+          }),
+        "Preferences saved. New suggestions will use these settings.",
+      );
+      if (saved !== undefined) {
+        const tabs = ["/", "/ideas", "/connections", "/plans", "/moment"];
+        const destination = tabs.find((tab) => tab === returnTo) || "/";
+        router.replace(destination as "/" | "/ideas" | "/connections" | "/plans" | "/moment");
+      }
+    })();
   };
 
   return (

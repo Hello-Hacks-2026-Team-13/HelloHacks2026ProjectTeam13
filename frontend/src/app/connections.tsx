@@ -15,6 +15,7 @@ import {
 } from "@/components/across-ui";
 import { newProfile } from "@/components/profile-editor";
 import { formatTimezone } from "@/lib/timezone";
+import { DailyRevealTimeSetting } from "@/components/daily-reveal-time-setting";
 
 export default function ConnectionsScreen() {
   const {
@@ -105,10 +106,16 @@ export default function ConnectionsScreen() {
 
       <Card>
         <Heading>Account settings</Heading>
-        <Button kind="quiet" onPress={() => router.push("/time")}>
+        <Button
+          kind="quiet"
+          onPress={() =>
+            router.push({ pathname: "/time", params: { returnTo: "/connections" } })
+          }
+        >
           Edit profile, time zone & availability →
         </Button>
       </Card>
+      <DailyRevealTimeSetting />
       <Card>
         <Heading
           detail={

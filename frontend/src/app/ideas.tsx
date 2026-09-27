@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import type { Offer } from "../../../shared/types";
 import { acrossApi, useAcross } from "@/lib/across";
 import { formatTimezone } from "@/lib/timezone";
@@ -18,7 +18,6 @@ import {
 
 import {
   CategoryFilters,
-  DiscoveryTiles,
   type IdeaFilter,
 } from "@/components/figma-ui";
 import { fontFamily } from "@/constants/design";
@@ -27,6 +26,9 @@ export default function IdeasScreen() {
   const { state, busy, error, notice, execute } = useAcross();
   const [filter, setFilter] = useState<IdeaFilter>("all");
   const [providerNotice, setProviderNotice] = useState("");
+  useFocusEffect(
+    useCallback(() => () => setProviderNotice(""), []),
+  );
   const room = state?.room;
   const me = room?.profiles.find((profile) => profile.id === state?.userId);
   const partner = room?.profiles.find(
@@ -45,7 +47,6 @@ export default function IdeasScreen() {
         "POST",
       );
       setProviderNotice(response.notice);
-      setFilter("all");
       return response;
     }, "Fresh date ideas are ready.");
 
@@ -81,7 +82,9 @@ export default function IdeasScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Schedule: edit our available hours"
-            onPress={() => router.push("/time")}
+            onPress={() =>
+              router.push({ pathname: "/time", params: { returnTo: "/ideas" } })
+            }
             style={styles.schedule}
           >
             <Text style={styles.scheduleTitle}>
@@ -91,9 +94,6 @@ export default function IdeasScreen() {
               Our time · Find hours that work for both of you
             </Text>
           </Pressable>
-          {filter === "all" ? (
-            <DiscoveryTiles onGames={() => setFilter("game")} />
-          ) : null}
           <Heading detail="One movie, one game, and one recipe that fit your shared time.">
             Picked for you
           </Heading>
@@ -131,7 +131,12 @@ export default function IdeasScreen() {
                   ? "Choose All ideas or request a fresh set."
                   : "Choose Find our next date to get a movie, game, and recipe. Allow at least 90 minutes together in Our time."}
               </Body>
-              <Button kind="secondary" onPress={() => router.push("/time")}>
+              <Button
+                kind="secondary"
+                onPress={() =>
+                  router.push({ pathname: "/time", params: { returnTo: "/ideas" } })
+                }
+              >
                 Adjust availability
               </Button>
             </Card>
