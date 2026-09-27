@@ -1,6 +1,6 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { DateTime } from "luxon";
-import type { Activity, Room, Slot, Offer } from "../../shared/types.ts";
+import type { Activity, Room, Offer } from "../../shared/types.ts";
 import { findSlots } from "./domain.ts";
 async function tmdb(path: string) {
   const response = await fetch(`https://api.themoviedb.org/3${path}`, {
@@ -316,14 +316,13 @@ function demoIdeas(
   );
 }
 
-export async function suggest(room: Room, busy: Slot[], demo: boolean) {
+export async function suggest(room: Room, demo: boolean) {
   if (room.profiles.length !== 2)
     throw new Error("Pair with your partner first.");
   const max = Math.min(...room.profiles.map((p) => p.duration));
-  const blocked = [
-    ...busy,
-    ...room.plans.filter((p) => p.status !== "cancelled").map((p) => p.slot),
-  ];
+  const blocked = room.plans
+    .filter((p) => p.status !== "cancelled")
+    .map((p) => p.slot);
   const now = DateTime.utc();
   const slotFor = (minutes: number) =>
     findSlots(room.profiles, blocked, minutes, now, 1)[0];
@@ -347,7 +346,7 @@ export async function suggest(room: Room, busy: Slot[], demo: boolean) {
     }
     const conflicts = findSlots(room.profiles, [], 90, now, 1).length > 0;
     const reason = conflicts
-      ? "Calendar conflicts or existing plans reduce your shared free time"
+      ? "Existing plans reduce your shared free time"
       : "Your saved hours and days, compared across both time zones, overlap";
     throw new Error(
       `${reason} for at most ${available} minutes in the next 7 days. A full set needs 90 minutes together. Date length does not extend your available hours. ${conflicts ? "Review conflicts or choose wider hours" : "Adjust your hours or days"} in Our time and save preferences. Your previous ideas are unchanged.`,

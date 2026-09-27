@@ -33,7 +33,6 @@ export function defaultProfile(id: string, name = "You"): Profile {
     days: [1, 2, 3, 4, 5, 6, 7],
     genres: [35, 10749],
     duration: 120,
-    calendarConnected: false,
   };
 }
 export function fitsHours(profile: Profile, start: DateTime, end: DateTime) {

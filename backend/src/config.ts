@@ -28,12 +28,6 @@ export const live = process.env.APP_MODE === "live";
 export const origin = (
   process.env.APP_ORIGIN || "http://localhost:8081"
 ).replace(/\/$/, "");
-export const apiOrigin = (
-  process.env.API_ORIGIN ||
-  (process.env.NODE_ENV === "production"
-    ? origin
-    : `http://localhost:${Number(process.env.PORT) || 3001}`)
-).replace(/\/$/, "");
 export const allowedOrigins = new Set([
   origin,
   ...(process.env.APP_ALLOWED_ORIGINS || "")
@@ -41,12 +35,6 @@ export const allowedOrigins = new Set([
     .map((value) => value.trim().replace(/\/$/, ""))
     .filter(Boolean),
 ]);
-export const calendarReady = Boolean(
-  live &&
-  process.env.GOOGLE_CLIENT_ID &&
-  process.env.GOOGLE_CLIENT_SECRET &&
-  process.env.TOKEN_ENCRYPTION_KEY,
-);
 export const rawgReady = Boolean(process.env.RAWG_API_KEY?.trim());
 export const mealdbReady = Boolean(
   process.env.THEMEALDB_API_KEY?.trim() || "1",
@@ -59,13 +47,6 @@ if (
 )
   throw new Error(
     "Live mode requires SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, and SUPABASE_SECRET_KEY. See backend/.env.example.",
-  );
-if (
-  process.env.TOKEN_ENCRYPTION_KEY &&
-  !/^[a-fA-F0-9]{64}$/.test(process.env.TOKEN_ENCRYPTION_KEY)
-)
-  throw new Error(
-    "TOKEN_ENCRYPTION_KEY must be 32 bytes encoded as 64 hex characters.",
   );
 if (process.env.NODE_ENV === "production" && !live)
   throw new Error(

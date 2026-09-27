@@ -9,7 +9,6 @@ export type Profile = {
   days: number[];
   genres: number[];
   duration: number;
-  calendarConnected: boolean;
 };
 export type Activity = {
   id: string;
@@ -42,7 +41,6 @@ export type AppState = {
   mode: "demo" | "live";
   userId: string;
   room: Room | null;
-  calendarReady: boolean;
   tmdbReady: boolean;
   rawgReady: boolean;
   mealdbReady: boolean;
@@ -51,7 +49,6 @@ export type Config = {
   mode: "demo" | "live";
   supabaseUrl: string;
   supabasePublishableKey: string;
-  calendarReady: boolean;
   tmdbReady: boolean;
   rawgReady: boolean;
   mealdbReady: boolean;

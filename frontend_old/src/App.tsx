@@ -23,7 +23,6 @@ import {
   Sparkles,
   Sun,
   Utensils,
-  Unplug,
   Users,
   X,
   WandSparkles,
@@ -74,7 +73,6 @@ const initialProfile: Profile = {
   days: [1, 2, 3, 4, 5, 6, 7],
   genres: [35, 10749],
   duration: 120,
-  calendarConnected: false,
 };
 const zones = [
   "America/Vancouver",
@@ -379,8 +377,8 @@ function ProfileForm({
         </div>
       </fieldset>
       <p className="muted small">
-        Hours are in your local time zone. Calendar busy times are removed when
-        you connect Google.
+        Hours are in your local time zone. Suggestions use both partners’ saved
+        availability and existing plans.
       </p>
       <Button
         type="submit"
@@ -423,9 +421,7 @@ function ClockCard({
       </div>
       <div className="clock-footer">
         <span className="status-dot" />
-        {profile.calendarConnected
-          ? "Calendar connected"
-          : "Using preferred hours"}
+        Using preferred hours
         <Globe2 size={13} />
       </div>
       <div className="landscape" aria-hidden="true">
@@ -638,17 +634,6 @@ function App() {
             })
             .catch((e) => setError(e.message));
         });
-        const calendar = new URLSearchParams(window.location.search).get(
-          "calendar",
-        );
-        if (calendar) {
-          if (calendar === "connected") setToast("Google Calendar connected.");
-          else
-            setError(
-              "Calendar connection was not completed. Check your OAuth setup and try again.",
-            );
-          window.history.replaceState({}, "", window.location.pathname);
-        }
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -768,11 +753,6 @@ function App() {
       setModal(null);
       setSearched(false);
     }, "Preferences saved.");
-  const connectCalendar = () =>
-    void action(async () => {
-      const { url } = await api<{ url: string }>("/calendar/connect", "POST");
-      window.location.assign(url);
-    });
   const iconForTab = tabs.find((t) => t.id === tab)!;
   return (
     <MotionConfig reducedMotion="user">
@@ -1342,9 +1322,7 @@ function App() {
                               </div>
                               <p className="small muted">
                                 Up to {p.duration} minutes together ·{" "}
-                                {p.calendarConnected
-                                  ? "Google busy times excluded"
-                                  : "Manual availability"}
+                                Saved availability
                               </p>
                             </article>
                           ))}
@@ -1355,8 +1333,8 @@ function App() {
                           </div>
                           <h2>Let’s find your overlap.</h2>
                           <p>
-                            We compare both local schedules, remove calendar
-                            conflicts, and find enough time for each activity.
+                            We compare both local schedules and existing plans
+                            to find enough time for each activity.
                           </p>
                           <Button
                             disabled={busy || !partner}
@@ -1775,7 +1753,7 @@ function App() {
           <Modal title="Your connections" onClose={() => setModal(null)}>
             <p className="muted">
               {config?.mode === "demo"
-                ? "You’re in a local demo. Live accounts and calendars become available after project setup."
+                ? "You’re in a local demo. Live accounts become available after project setup."
                 : "Connect what helps you make time for each other."}
             </p>
             <section
@@ -1795,10 +1773,8 @@ function App() {
                         <p>
                           Removing this pairing immediately removes both
                           partners from the shared space. Shared plans, the
-                          invite, memberships, and stored calendar tokens are
-                          deleted from Supabase. Your individual sign-in
-                          accounts remain. Google access may need to be revoked
-                          separately.
+                          invite and memberships are deleted from Supabase.
+                          Your individual sign-in accounts remain.
                         </p>
                         <label className="checkbox-row">
                           <input
@@ -1992,50 +1968,6 @@ function App() {
                 {config?.mode === "live" ? "LIVE" : "DEMO"}
               </span>
             </div>
-            <div className="connection-item">
-              <div className="connection-icon">
-                <CalendarDays size={21} />
-              </div>
-              <div>
-                <h3>Google Calendar</h3>
-                <p>
-                  {me?.calendarConnected
-                    ? "Your primary calendar’s busy times are included."
-                    : "Read busy times from your primary calendar. Event titles stay private."}
-                </p>
-              </div>
-            </div>
-            {me?.calendarConnected ? (
-              <Button
-                secondary
-                disabled={busy}
-                onClick={() =>
-                  void action(async () => {
-                    await api("/calendar", "DELETE");
-                  }, "Calendar disconnected. Manual hours still apply.")
-                }
-              >
-                <Unplug size={15} /> Disconnect Calendar
-              </Button>
-            ) : (
-              <Button
-                secondary
-                disabled={busy || !config?.calendarReady || !me}
-                onClick={connectCalendar}
-              >
-                Connect Google Calendar <Link2 size={15} />
-              </Button>
-            )}
-            {!config?.calendarReady && (
-              <p className="small muted">
-                Requires live mode and Google OAuth credentials in backend/.env.
-              </p>
-            )}
-            {!me && (
-              <p className="small muted">
-                Create or join a space before connecting Calendar.
-              </p>
-            )}
             <div className="connection-item">
               <div className="connection-icon">
                 <Film size={21} />

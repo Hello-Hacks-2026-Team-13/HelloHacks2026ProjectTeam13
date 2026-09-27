@@ -4,14 +4,10 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { z, ZodError } from "zod";
 import { DateTime } from "luxon";
-import { timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import {
   live,
-  origin,
-  apiOrigin,
   allowedOrigins,
-  calendarReady,
   rawgReady,
   mealdbReady,
 } from "./config.ts";
@@ -33,13 +29,6 @@ import {
   fitsHours,
   overlaps,
 } from "./domain.ts";
-import {
-  startCalendar,
-  resumeCalendarStart,
-  finishCalendar,
-  disconnectCalendar,
-  calendarBusy,
-} from "./calendar.ts";
 import { suggest, commitSuggestions } from "./activities.ts";
 import type { Room } from "../../shared/types.ts";
 import momentsRouter from "./moments.ts";
@@ -116,7 +105,6 @@ app.get("/api/config", (_req, res) =>
     mode: live ? "live" : "demo",
     supabaseUrl: live ? process.env.SUPABASE_URL : "",
     supabasePublishableKey: live ? process.env.SUPABASE_PUBLISHABLE_KEY : "",
-    calendarReady,
     tmdbReady: Boolean(process.env.TMDB_READ_ACCESS_TOKEN),
     rawgReady,
     mealdbReady,
@@ -128,76 +116,6 @@ app.post("/api/demo/session", async (_req, res) => {
     return;
   }
   res.json({ token: await newDemoUser() });
-});
-app.get("/api/calendar/start", async (req, res, next) => {
-  try {
-    const { state, native } = z
-      .object({
-        state: z.string().length(64),
-        native: z.enum(["0", "1"]).optional(),
-      })
-      .parse(req.query);
-    const url = await resumeCalendarStart(state);
-    res.cookie("calendar_state", state, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: apiOrigin.startsWith("https:"),
-      path: "/api/calendar",
-      maxAge: 600000,
-    });
-    if (native === "1") {
-      res.cookie("calendar_return", "native", {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: apiOrigin.startsWith("https:"),
-        path: "/api/calendar",
-        maxAge: 600000,
-      });
-    }
-    res.redirect(url);
-  } catch (error) {
-    next(error);
-  }
-});
-app.get("/api/calendar/callback", async (req, res) => {
-  const native =
-    req.headers.cookie
-      ?.split(";")
-      .map((value) => value.trim())
-      .find((value) => value.startsWith("calendar_return="))
-      ?.split("=")[1] === "native";
-  try {
-    const { code, state } = z
-      .object({ code: z.string(), state: z.string() })
-      .parse(req.query);
-    const cookie =
-      req.headers.cookie
-        ?.split(";")
-        .map((c) => c.trim())
-        .find((c) => c.startsWith("calendar_state="))
-        ?.split("=")[1] || "";
-    if (
-      cookie.length !== state.length ||
-      !timingSafeEqual(Buffer.from(cookie), Buffer.from(state))
-    )
-      throw new Error("Calendar state mismatch");
-    res.clearCookie("calendar_state", { path: "/api/calendar" });
-    res.clearCookie("calendar_return", { path: "/api/calendar" });
-    await finishCalendar(code, state);
-    res.redirect(
-      native
-        ? "across:///connections?calendar=connected"
-        : `${origin}/?calendar=connected`,
-    );
-  } catch {
-    res.clearCookie("calendar_state", { path: "/api/calendar" });
-    res.clearCookie("calendar_return", { path: "/api/calendar" });
-    res.redirect(
-      native
-        ? "across:///connections?calendar=error"
-        : `${origin}/?calendar=error`,
-    );
-  }
 });
 app.use("/api", async (req, res, next) => {
   const token = req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
@@ -240,7 +158,6 @@ app.get("/api/state", async (_req, res) =>
       const { moments: _privateMoments, ...publicRoom } = room;
       return publicRoom;
     }),
-    calendarReady,
     tmdbReady: Boolean(process.env.TMDB_READ_ACCESS_TOKEN),
     rawgReady,
     mealdbReady,
@@ -249,7 +166,6 @@ app.get("/api/state", async (_req, res) =>
 const readProfile = (req: Request, id: string) => ({
   ...profileInput.parse(req.body.profile),
   id,
-  calendarConnected: false,
 });
 app.post("/api/pair/create", async (req, res) =>
   res.json({
@@ -315,7 +231,7 @@ app.post("/api/suggestions", async (_req, res) => {
   const room = await requireRoom(res.locals.userId);
   if (room.profiles.length !== 2)
     throw new Error("Pair with your partner first.");
-  const result = await suggest(room, await calendarBusy(room), !live);
+  const result = await suggest(room, !live);
   await mutateRoom(res.locals.userId, (current) => {
     commitSuggestions(current, room, result.offers);
   });
@@ -361,18 +277,6 @@ app.post("/api/plans/:id/accept", async (req, res) => {
     throw new Error(
       "This no longer fits both partners’ hours. Cancel and find a new time.",
     );
-  if (
-    (
-      await calendarBusy(
-        room,
-        new Date(plan.slot.start),
-        new Date(plan.slot.end),
-      )
-    ).some((b) => overlaps(b, plan.slot))
-  )
-    throw new Error(
-      "A calendar conflict appeared. Cancel and find a new time.",
-    );
   await mutateRoom(res.locals.userId, (current) => {
     if (JSON.stringify(current.profiles) !== JSON.stringify(room.profiles))
       throw new Error("Preferences changed. Try again.");
@@ -390,25 +294,6 @@ app.post("/api/plans/:id/cancel", async (req, res) => {
     if (!plan) throw new Error("Plan not found.");
     plan.status = "cancelled";
   });
-  res.json({ ok: true });
-});
-app.post("/api/calendar/connect", async (_req, res) => {
-  await requireRoom(res.locals.userId);
-  const { url, state } = await startCalendar(res.locals.userId);
-  res.cookie("calendar_state", state, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: apiOrigin.startsWith("https:"),
-    path: "/api/calendar",
-    maxAge: 600000,
-  });
-  const browserUrl = new URL("/api/calendar/start", apiOrigin);
-  browserUrl.searchParams.set("state", state);
-  browserUrl.searchParams.set("native", "1");
-  res.json({ url, browserUrl: browserUrl.toString() });
-});
-app.delete("/api/calendar", async (_req, res) => {
-  await disconnectCalendar(res.locals.userId);
   res.json({ ok: true });
 });
 app.use("/api", (_req, res) =>
