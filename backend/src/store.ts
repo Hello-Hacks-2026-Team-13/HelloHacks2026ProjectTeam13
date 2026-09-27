@@ -208,3 +208,19 @@ export async function mutateRoom(
   }
   throw new Error("Your partner just changed this space. Please try again.");
 }
+
+// Used by the retention worker; service-role access stays on the server.
+export async function listRooms(): Promise<Room[]> {
+  if (!admin) return structuredClone(Object.values(demo.rooms));
+  const rooms: Room[] = [];
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await admin
+      .from("rooms")
+      .select("data")
+      .order("id")
+      .range(offset, offset + 499);
+    if (error) throw error;
+    rooms.push(...data.map((row) => row.data as Room));
+    if (data.length < 500) return rooms;
+  }
+}

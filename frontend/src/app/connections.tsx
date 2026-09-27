@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Alert, Platform, Share, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import * as ExpoLinking from "expo-linking";
@@ -19,7 +19,7 @@ import { newProfile } from "@/components/profile-editor";
 
 export default function ConnectionsScreen() {
   const { state, config, busy, error, notice, execute } = useAcross();
-  const [pairName, setPairName] = useState("");
+  const [pairNameDraft, setPairName] = useState<string | null>(null);
   const [pairCode, setPairCode] = useState("");
   const [invite, setInvite] = useState("");
   const [removeStep, setRemoveStep] = useState(0);
@@ -33,9 +33,7 @@ export default function ConnectionsScreen() {
   const paired = Boolean(partner);
   const calendarConnected = Boolean(me?.calendarConnected);
 
-  useEffect(() => {
-    if (me && !pairName) setPairName(me.name);
-  }, [me?.id]);
+  const pairName = pairNameDraft ?? me?.name ?? "";
 
   const createOrJoin = () => {
     if (!pairName.trim()) return;

@@ -33,7 +33,15 @@
           "imageWidth": 76
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a photo for your private daily moment.",
+          "cameraPermission": "Take a photo for your private daily moment.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

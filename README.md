@@ -139,3 +139,19 @@ backend/.env.example       Backend and provider integration settings
 ## Deployment later
 
 Build with `npm run build`, set `NODE_ENV=production`, `APP_MODE=live`, `HOST=0.0.0.0`, `APP_ORIGIN=https://your-domain`, and `API_ORIGIN=https://your-domain`, then run `npm start`. Express serves `frontend/dist` and `/api` from one origin. Update Supabase redirect configuration and the Google OAuth redirect URI (`https://your-domain/api/calendar/callback`). Keep `tsx` available in the runtime install. If deploying behind a trusted reverse proxy, configure Express trust-proxy explicitly for your host before using IP-based rate limiting. The local demo is not a public hosting mode.
+
+### Our daily moment
+
+Open **Our moment** (or the home card) after pairing. A shared collection of 28 prompts rotates without consecutive repeats. Each person can take or choose one photo and replace it until reveal. Accepted uploads are still JPEG, PNG, or WebP images up to 5 MB; HEIC can work when the device converts it, otherwise export as JPEG. The server validates image bytes, strips EXIF/location metadata, and saves a JPEG at up to 1600 px. It does not retain the original upload.
+
+The schedule uses 9 pm in the timezone that is ahead when the pair first opens the feature. That timezone stays fixed for this pairing, so travel or preference changes do not move deadlines. The first reveal is at least 24 hours away; subsequent rounds begin at each reveal. Local 9 pm is preserved across daylight saving, so an occasional round lasts 23 or 25 hours. Both partners see the deadline in their own timezone. Photos never reveal early, even if both submit. A missing submission does not block the other photo.
+
+After reveal, each partner can leave one editable emoji/message (up to 240 characters) per photo. Revealed photos and reactions are accessible for exactly 24 elapsed hours alongside the next prompt. There is no archive. The API denies expired photo reads immediately, even if the cleanup worker is behind. Removing a pairing also removes its photos.
+
+**Live setup:** run `supabase/daily_moments.sql` once in the Supabase SQL Editor after `schema.sql`. This creates the private `daily-moments` bucket and blocks direct client access, including when other permissive storage policies exist. All photo reads/uploads go through the authenticated API, which checks pair membership and reveal/expiry times. No new key or third-party API is needed. Never make this bucket public.
+
+**Retention:** while the Node API is running, its startup/minute worker deletes expired storage objects and photo/reaction metadata. Failed deletions are retried. Unreferenced uploads are removed after a 15-minute grace period to protect in-flight writes. If the API is stopped or storage is unavailable, physical deletion waits until it recovers; use an always-on backend for live retention. Demo photos live in ignored `backend/.data/moments`. Prompts/schedule metadata are reusable; photo content and reactions are not kept as memories. Photos downloaded or screenshotted outside Across cannot be removed by this timer. Provider backups follow the provider’s retention settings.
+
+**Device setup:** the Expo image-picker plugin supplies camera/photo permission descriptions without microphone access. Native development builds must be rebuilt to include the added module. The picker is also supported on web; camera availability depends on the device/browser. `expo-image-picker` is pinned to SDK 57 patch `57.0.19` because the newer recommended patch was excluded by the local npm release-age policy during installation.
+
+**Verification:** `npm test` includes image validation/replacement, owner-only previews, partner/outsider denial, no pre-reveal reactions, one-sided reveal, message limits, pairing removal, prompt rotation, timezone/date-line/DST boundaries, and exact access expiry. Live Supabase storage and physical-device camera permission flows require project/device testing.

@@ -1,3 +1,4 @@
+import type { MomentSchedule } from "./moments.ts";
 export type Profile = {
   id: string;
   name: string;
@@ -29,6 +30,7 @@ export type Plan = Offer & {
   createdBy: string;
 };
 export type Room = {
+  moments?: MomentSchedule;
   id: string;
   profiles: Profile[];
   offers: Offer[];

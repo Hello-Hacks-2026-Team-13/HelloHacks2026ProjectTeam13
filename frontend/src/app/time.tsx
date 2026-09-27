@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { router } from "expo-router";
 import type { Profile } from "../../../shared/types";
 import { acrossApi, useAcross } from "@/lib/across";
@@ -23,11 +23,8 @@ export default function TimeScreen() {
   const [editingPartner, setEditingPartner] = useState(false);
   const target =
     editingPartner && partner && config?.mode === "demo" ? partner : me;
-  const [draft, setDraft] = useState<Profile | null>(null);
-
-  useEffect(() => {
-    if (target) setDraft({ ...target });
-  }, [target?.id, editingPartner]);
+  const [editedDraft, setDraft] = useState<Profile | null>(null);
+  const draft = editedDraft?.id === target?.id ? editedDraft : target;
 
   if (!room || !me) {
     return (
@@ -88,7 +85,10 @@ export default function TimeScreen() {
       {config?.mode === "demo" && partner ? (
         <Button
           kind="secondary"
-          onPress={() => setEditingPartner((selected) => !selected)}
+          onPress={() => {
+            setDraft(null);
+            setEditingPartner((selected) => !selected);
+          }}
         >
           {editingPartner
             ? "Edit my preferences"

@@ -20,7 +20,7 @@ const API_URL = (
   process.env.EXPO_PUBLIC_API_URL || "http://localhost:3001"
 ).replace(/\/$/, "");
 const DEMO_TOKEN_KEY = "across-demo-session";
-const nativeClientHeader =
+const nativeClientHeader: Record<string, string> =
   Platform.OS === "web" ? {} : { "X-Across-Client": "native" };
 
 let client: SupabaseClient | null = null;
@@ -79,6 +79,29 @@ export async function acrossApi<T = { ok: boolean }>(
   method = "GET",
   body?: unknown,
 ): Promise<T> {
+  return acrossRequest<T>(
+    path,
+    method,
+    body === undefined ? undefined : JSON.stringify(body),
+    "application/json",
+  );
+}
+
+export async function uploadMomentPhoto(roundId: string, base64: string) {
+  return acrossRequest(
+    `/moments/${roundId}/photo`,
+    "PUT",
+    base64,
+    "text/plain",
+  );
+}
+
+async function acrossRequest<T>(
+  path: string,
+  method: string,
+  body: string | undefined,
+  contentType: string,
+): Promise<T> {
   let token = demoToken;
   if (client) token = (await currentToken())?.data.session?.access_token || "";
   const response = await fetch(`${API_URL}/api${path}`, {
@@ -86,10 +109,10 @@ export async function acrossApi<T = { ok: boolean }>(
     credentials: "include",
     headers: {
       ...nativeClientHeader,
-      "Content-Type": "application/json",
+      "Content-Type": contentType,
       Authorization: `Bearer ${token}`,
     },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body,
   });
   const result = await response.json().catch(() => {
     throw new Error(

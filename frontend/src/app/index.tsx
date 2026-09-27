@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Share, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { acrossApi, useAcross } from "@/lib/across";
@@ -14,14 +14,6 @@ import {
   palette,
 } from "@/components/across-ui";
 import { newProfile } from "@/components/profile-editor";
-
-const prompts = [
-  "Take a photo of something that made you pause today.",
-  "Show each other the view from where you are right now.",
-  "Find one small thing nearby that reminds you of your person.",
-  "Photograph a color you wish your partner could see today.",
-  "Send a picture of the coziest corner you can find.",
-];
 
 export default function HomeScreen() {
   const {
@@ -43,6 +35,11 @@ export default function HomeScreen() {
   const [joining, setJoining] = useState(false);
   const [invite, setInvite] = useState("");
 
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
   const room = state?.room;
   const me = room?.profiles.find((profile) => profile.id === state?.userId);
   const partner = room?.profiles.find(
@@ -50,8 +47,7 @@ export default function HomeScreen() {
   );
   const nextPlan = room?.plans
     .filter(
-      (plan) =>
-        plan.status === "saved" && Date.parse(plan.slot.start) > Date.now(),
+      (plan) => plan.status === "saved" && Date.parse(plan.slot.start) > now,
     )
     .sort(
       (left, right) =>
@@ -305,19 +301,15 @@ export default function HomeScreen() {
           </Card>
 
           <Card>
-            <Heading detail="A small prompt can make the distance feel less far away.">
-              A picture from your day
+            <Heading detail="One prompt. Two photos. A little piece of each other’s day.">
+              Our daily moment
             </Heading>
-            <Body>{prompts[new Date().getDate() % prompts.length]}</Body>
-            <Button
-              kind="secondary"
-              onPress={() =>
-                void Share.share({
-                  message: `Across photo prompt: ${prompts[new Date().getDate() % prompts.length]}`,
-                })
-              }
-            >
-              Share this prompt
+            <Body>
+              Share a photo, wait for the reveal, then leave a little love. Each
+              moment disappears after 24 hours.
+            </Body>
+            <Button onPress={() => router.push("/moment")}>
+              Open our daily moment
             </Button>
           </Card>
         </>

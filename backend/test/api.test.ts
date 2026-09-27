@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
+import sharp from "sharp";
 import { defaultProfile } from "../src/domain.ts";
 
 test("API: real pairing, private reads, three suggestions, two votes, cancellation and persistence", async () => {
@@ -154,9 +155,110 @@ test("API: real pairing, private reads, three suggestions, two votes, cancellati
       ).status,
       400,
     );
+    // Daily moments: real authenticated routes and real image storage.
+    const daily = await call("/moments", a);
+    assert.equal(daily.status, 200);
+    const round = daily.data.rounds[0];
+    const photo = (
+      await sharp({
+        create: { width: 8, height: 8, channels: 3, background: "#cb6554" },
+      })
+        .png()
+        .toBuffer()
+    ).toString("base64");
+    const upload = async (token: string, content = photo) =>
+      fetch(`http://127.0.0.1:${port}/api/moments/${round.id}/photo`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "text/plain",
+        },
+        body: content,
+      });
+    assert.equal((await upload(c)).status, 409);
+    assert.equal(
+      (await upload(a, Buffer.from("not an image").toString("base64"))).status,
+      409,
+    );
+    assert.equal((await upload(a)).status, 200);
+    assert.equal((await upload(a)).status, 200); // replacement leaves one object
+    assert.equal((await readdir(join(dir, "moments"))).length, 1);
+    assert.equal(
+      (await call(`/moments/${round.id}/photos/${a}`, a)).status,
+      200,
+    );
+    assert.equal(
+      (await call(`/moments/${round.id}/photos/${a}`, b)).status,
+      403,
+    );
+    assert.equal(
+      (await call(`/moments/${round.id}/photos/${a}`, c)).status,
+      409,
+    );
+    assert.equal((await call("/state", b)).data.room.moments, undefined);
+    assert.equal(
+      (
+        await call(`/moments/${round.id}/photos/${a}/reaction`, b, "PUT", {
+          emoji: "❤️",
+          message: "Too early",
+        })
+      ).status,
+      409,
+    );
+    await stop();
+    const saved = JSON.parse(await readFile(join(dir, "demo.json"), "utf8"));
+    const storedRoom = Object.values(saved.rooms)[0] as any;
+    storedRoom.moments.rounds[0].revealAt = new Date(
+      Date.now() - 1000,
+    ).toISOString();
+    await writeFile(join(dir, "demo.json"), JSON.stringify(saved));
+    await start();
+    // One missing submission does not prevent reveal.
+    assert.equal(
+      (await call(`/moments/${round.id}/photos/${a}`, b)).status,
+      200,
+    );
+    assert.equal((await upload(a)).status, 409);
+    assert.equal(
+      (
+        await call(`/moments/${round.id}/photos/${a}/reaction`, b, "PUT", {
+          emoji: "❤️",
+          message: "Made me smile",
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await call(`/moments/${round.id}/photos/${a}/reaction`, b, "PUT", {
+          emoji: "😂",
+          message: "Updated",
+        })
+      ).status,
+      200,
+    );
+    const revealed = (await call("/moments", a)).data.rounds.find(
+      (r: any) => r.id === round.id,
+    );
+    assert.equal(revealed.photos[0].reactions.length, 1);
+    assert.equal(revealed.photos[0].reactions[0].message, "Updated");
+    assert.equal(
+      (
+        await call(`/moments/${round.id}/photos/${a}/reaction`, b, "PUT", {
+          emoji: "❤️",
+          message: "x".repeat(241),
+        })
+      ).status,
+      400,
+    );
     // An outsider cannot remove a pair; removal frees both accounts.
     assert.equal((await call("/pair/remove", c, "POST")).status, 409);
     assert.equal((await call("/pair/remove", a, "POST")).status, 200);
+    assert.equal((await readdir(join(dir, "moments"))).length, 0);
+    assert.equal(
+      (await call(`/moments/${round.id}/photos/${a}`, b)).status,
+      409,
+    );
     assert.equal((await call("/state", a)).data.room, null);
     assert.equal((await call("/state", b)).data.room, null);
     const solo = await call("/pair/create", a, "POST", { profile });

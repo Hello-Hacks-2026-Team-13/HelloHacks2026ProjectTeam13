@@ -55,7 +55,7 @@ function AppNavigation() {
               <SymbolView
                 name={{
                   ios: "calendar",
-                  android: "calendar-month",
+                  android: "calendar_month",
                   web: "calendar_month",
                 }}
                 size={21}
@@ -72,7 +72,7 @@ function AppNavigation() {
               <SymbolView
                 name={{
                   ios: "sparkles",
-                  android: "auto-awesome",
+                  android: "auto_awesome",
                   web: "auto_awesome",
                 }}
                 size={21}
@@ -91,6 +91,23 @@ function AppNavigation() {
                   ios: "heart.fill",
                   android: "favorite",
                   web: "favorite",
+                }}
+                size={21}
+                tintColor={focused ? palette.coralDark : palette.muted}
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="moment"
+          options={{
+            title: "Our moment",
+            tabBarIcon: ({ focused }) => (
+              <SymbolView
+                name={{
+                  ios: "camera.fill",
+                  android: "photo_camera",
+                  web: "photo_camera",
                 }}
                 size={21}
                 tintColor={focused ? palette.coralDark : palette.muted}

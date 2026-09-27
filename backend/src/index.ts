@@ -42,6 +42,8 @@ import {
 } from "./calendar.ts";
 import { suggest } from "./activities.ts";
 import type { Room } from "../../shared/types.ts";
+import momentsRouter from "./moments.ts";
+import { startMomentCleanup, deleteMomentFiles } from "./moment-storage.ts";
 const app = express();
 const port = Number(process.env.PORT) || 3001;
 app.use(
@@ -223,6 +225,7 @@ app.use("/api", async (req, res, next) => {
   }
   next();
 });
+app.use("/api/moments", momentsRouter);
 const requireRoom = async (userId: string): Promise<Room> => {
   const room = await getRoom(userId);
   if (!room) throw new Error("Create or join a space first.");
@@ -232,7 +235,11 @@ app.get("/api/state", async (_req, res) =>
   res.json({
     mode: live ? "live" : "demo",
     userId: res.locals.userId,
-    room: await getRoom(res.locals.userId),
+    room: await getRoom(res.locals.userId).then((room) => {
+      if (!room) return null;
+      const { moments: _privateMoments, ...publicRoom } = room;
+      return publicRoom;
+    }),
     calendarReady,
     tmdbReady: Boolean(process.env.TMDB_READ_ACCESS_TOKEN),
     rawgReady,
@@ -261,7 +268,15 @@ app.post("/api/pair/invite", async (_req, res) =>
   res.json({ code: await rotateInvite(res.locals.userId) }),
 );
 app.post("/api/pair/remove", async (_req, res) => {
+  const room = await getRoom(res.locals.userId);
   await removePairing(res.locals.userId);
+  const files =
+    room?.moments?.rounds.flatMap((r) =>
+      Object.values(r.photos).map((p) => p.file),
+    ) || [];
+  await deleteMomentFiles(files).catch((error) =>
+    console.error("Moment file deletion will retry:", error.message),
+  );
   res.json({ ok: true });
 });
 app.post("/api/demo/partner", async (_req, res) => {
@@ -427,3 +442,5 @@ app.listen(port, process.env.HOST || "0.0.0.0", () =>
     `Across API: http://localhost:${port} (${live ? "live" : "demo"})`,
   ),
 );
+
+startMomentCleanup();
