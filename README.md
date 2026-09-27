@@ -2,7 +2,7 @@
 
 The mobile and web client is built with React Native, Expo, TypeScript, and Expo Router. The Node.js backend uses Express and TypeScript. Supabase provides live authentication and shared persistence. TMDB, RAWG, and TheMealDB provide movie, co-op game, and recipe ideas.
 
-## Try the draft
+## Try the demo
 
 Requires Node 22.12+ (Node 24 LTS recommended).
 
