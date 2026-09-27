@@ -31,6 +31,10 @@ function providers(
       genres: string | null,
       page: number,
     ) => { ids: number[]; totalPages: number };
+    gameSearch?: (
+      genres: string | null,
+      page: number,
+    ) => { ids: number[]; totalPages: number };
     runtimeFor?: (id: number) => number;
     unavailableMovieIds?: number[];
   } = {},
@@ -70,11 +74,18 @@ function providers(
       else data = { runtime: options.runtimeFor?.(id) ?? 95 };
     } else if (url.hostname === "api.rawg.io") {
       if (options.failGame) return new Response("", { status: 503 });
+      const search = options.gameSearch?.(
+        url.searchParams.get("genres"),
+        page,
+      ) || { ids: [page], totalPages: 2 };
       data = {
-        results: [
-          { id: page, name: `Game ${page}`, slug: `game-${page}`, rating: 4 },
-        ],
-        next: page === 1 ? "next" : null,
+        results: search.ids.map((id) => ({
+          id,
+          name: `Game ${id}`,
+          slug: `game-${id}`,
+          rating: 4,
+        })),
+        next: page < search.totalPages ? "next" : null,
       };
     } else if (url.hostname === "www.themealdb.com") {
       meal++;
@@ -380,3 +391,143 @@ test("both partners with no genre preference can receive unrestricted genre sugg
     "false",
   );
 });
+
+function gameQueries(urls: string[]) {
+  return urls
+    .map((url) => new URL(url))
+    .filter((url) => url.hostname === "api.rawg.io");
+}
+
+test("different game tastes use Action OR Adventure OR Puzzle and retain online co-op", async (t) => {
+  const urls = providers(t, {
+    gameSearch: (genres) => ({
+      ids: genres === "4,3,7" ? [31] : [],
+      totalPages: 1,
+    }),
+  });
+  const state = room();
+  state.profiles[0].gameGenres = [4, 3];
+  state.profiles[1].gameGenres = [7];
+  const result = await suggest(state, false);
+  assert.equal(result.offers[1].activity.id, "rawg-31");
+  assert.deepEqual(
+    gameQueries(urls).map((url) => url.searchParams.get("genres")),
+    ["4,3,7"],
+  );
+  assert.ok(
+    gameQueries(urls).every(
+      (url) => url.searchParams.get("tags") === "online-co-op",
+    ),
+  );
+  assert.equal(movieQueries(urls)[0].searchParams.get("with_genres"), "35");
+});
+
+test("shared game genres stay first even when only a later page has an unseen game", async (t) => {
+  const urls = providers(t, {
+    gameSearch: (genres, page) => ({
+      ids: genres === "7,10" ? [page] : [99],
+      totalPages: 2,
+    }),
+  });
+  const state = room();
+  state.profiles[0].gameGenres = [4, 7, 10];
+  state.profiles[1].gameGenres = [7, 10, 14];
+  state.suggestionHistory = ["rawg-1"];
+  assert.equal((await suggest(state, false)).offers[1].activity.id, "rawg-2");
+  assert.deepEqual(
+    gameQueries(urls).map((url) => url.searchParams.get("genres")),
+    ["7,10", "7,10"],
+  );
+});
+
+test("game fallback excludes previous IDs and titles, and failed searches preserve the old set", async (t) => {
+  const urls = providers(t, {
+    gameSearch: (genres) => ({
+      ids: genres === "7" ? [1, 2] : [1, 2, 3],
+      totalPages: 1,
+    }),
+  });
+  const state = room();
+  state.profiles[0].gameGenres = [4, 7];
+  state.profiles[1].gameGenres = [7, 14];
+  state.suggestionHistory = ["rawg-1", "title:game:game 2"];
+  const result = await suggest(state, false);
+  assert.equal(result.offers[1].activity.id, "rawg-3");
+  assert.deepEqual(
+    gameQueries(urls).map((url) => url.searchParams.get("genres")),
+    ["7", "4,7,14"],
+  );
+  commitSuggestions(state, structuredClone(state), result.offers);
+  const before = JSON.stringify(state);
+  await assert.rejects(suggest(state, false), /no unseen suitable game/);
+  assert.equal(JSON.stringify(state), before);
+});
+
+test("empty shared game results fall back to a deduplicated either-partner union", async (t) => {
+  const urls = providers(t, {
+    gameSearch: (genres) => ({ ids: genres === "7" ? [] : [5], totalPages: 1 }),
+  });
+  const state = room();
+  state.profiles[0].gameGenres = [4, 7, 7];
+  state.profiles[1].gameGenres = [7, 14, 14];
+  assert.equal((await suggest(state, false)).offers[1].activity.id, "rawg-5");
+  assert.deepEqual(
+    gameQueries(urls).map((url) => url.searchParams.get("genres")),
+    ["7", "4,7,14"],
+  );
+});
+
+test("identical game tastes do not repeat an exhausted search", async (t) => {
+  const urls = providers(t, { gameSearch: () => ({ ids: [], totalPages: 1 }) });
+  const state = room();
+  state.profiles.forEach((profile) => {
+    profile.gameGenres = [5];
+  });
+  await assert.rejects(suggest(state, false), /no unseen suitable game/);
+  assert.equal(gameQueries(urls).length, 1);
+  assert.equal(gameQueries(urls)[0].searchParams.get("genres"), "5");
+});
+
+test("game fallback begins after the bounded five-page shared search", async (t) => {
+  const urls = providers(t, {
+    gameSearch: (genres) => ({
+      ids: genres === "7" ? [1] : [2],
+      totalPages: 20,
+    }),
+  });
+  const state = room();
+  state.profiles[0].gameGenres = [4, 7];
+  state.profiles[1].gameGenres = [7, 14];
+  state.suggestionHistory = ["rawg-1"];
+  assert.equal((await suggest(state, false)).offers[1].activity.id, "rawg-2");
+  assert.deepEqual(
+    gameQueries(urls).map((url) => [
+      url.searchParams.get("genres"),
+      url.searchParams.get("page"),
+    ]),
+    [
+      ["7", "1"],
+      ["7", "2"],
+      ["7", "3"],
+      ["7", "4"],
+      ["7", "5"],
+      ["4,7,14", "1"],
+    ],
+  );
+});
+
+for (const legacy of [false, true]) {
+  test(`empty game preferences ${legacy ? "on legacy profiles" : "on new profiles"} remain unrestricted; one partner's choices still apply`, async (t) => {
+    const urls = providers(t);
+    const state = room();
+    state.profiles.forEach((profile) => {
+      if (legacy) delete profile.gameGenres;
+      else profile.gameGenres = [];
+    });
+    assert.equal((await suggest(state, false)).offers.length, 3);
+    assert.equal(gameQueries(urls)[0].searchParams.has("genres"), false);
+    state.profiles[1].gameGenres = [5, 10];
+    assert.equal((await suggest(state, false)).offers.length, 3);
+    assert.equal(gameQueries(urls)[1].searchParams.get("genres"), "5,10");
+  });
+}

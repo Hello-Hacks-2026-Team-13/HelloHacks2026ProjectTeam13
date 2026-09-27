@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import { z } from "zod";
 import type { Profile, Slot, Room, Plan } from "../../shared/types.ts";
+import { GAME_GENRES } from "../../shared/game-genres.ts";
 
 export const profileInput = z
   .object({
@@ -16,6 +17,19 @@ export const profileInput = z
     endHour: z.number().int().min(1).max(24),
     days: z.array(z.number().int().min(1).max(7)).min(1).max(7),
     genres: z.array(z.number().int().positive()).max(10),
+    gameGenres: z
+      .array(
+        z
+          .number()
+          .int()
+          .refine(
+            (id) => GAME_GENRES.some((genre) => genre.id === id),
+            "Choose a supported game genre",
+          ),
+      )
+      .max(GAME_GENRES.length)
+      .transform((genres) => [...new Set(genres)])
+      .default([]),
     duration: z.number().int().min(30).max(240),
   })
   .refine(
@@ -32,6 +46,7 @@ export function defaultProfile(id: string, name = "You"): Profile {
     endHour: 22,
     days: [1, 2, 3, 4, 5, 6, 7],
     genres: [35, 10749],
+    gameGenres: [],
     duration: 120,
   };
 }

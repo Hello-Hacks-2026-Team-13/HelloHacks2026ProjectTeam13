@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { Profile } from "../../../shared/types";
+import { GAME_GENRES } from "../../../shared/game-genres";
 import { Chip, Field, Heading, palette } from "./across-ui";
 
 export const GENRES = [
@@ -35,6 +36,7 @@ export function newProfile(name = ""): Profile {
     endHour: 22,
     days: [1, 2, 3, 4, 5, 6, 7],
     genres: [35, 10749],
+    gameGenres: [],
     duration: 120,
   };
 }
@@ -159,6 +161,30 @@ export function ProfileEditor({
                       genres: selected
                         ? value.genres.filter((id) => id !== genre.id)
                         : [...value.genres, genre.id].slice(0, 10),
+                    })
+                  }
+                />
+              );
+            })}
+          </View>
+          <Heading detail="Shared genres come first. If none fit, we try any genre either of you likes. Leave all unselected for no genre preference. Games are always online co-op.">
+            Games you enjoy
+          </Heading>
+          <View style={styles.chips}>
+            {GAME_GENRES.map((genre) => {
+              const genres = value.gameGenres ?? [];
+              const selected = genres.includes(genre.id);
+              return (
+                <Chip
+                  key={genre.id}
+                  label={genre.label}
+                  accessibilityLabel={`Game genre: ${genre.label}`}
+                  selected={selected}
+                  onPress={() =>
+                    update({
+                      gameGenres: selected
+                        ? genres.filter((id) => id !== genre.id)
+                        : [...genres, genre.id],
                     })
                   }
                 />

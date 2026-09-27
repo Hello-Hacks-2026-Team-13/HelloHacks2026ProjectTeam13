@@ -152,3 +152,31 @@ test("validates hours and real IANA zones", () => {
   assert.equal(profileInput.safeParse({ ...first, days: [] }).success, false);
   assert.equal(profileInput.safeParse(first).success, true);
 });
+
+test("game preferences accept supported genres, deduplicate, and default legacy profiles", () => {
+  const legacy = { ...first };
+  delete legacy.gameGenres;
+  assert.deepEqual(profileInput.parse(legacy).gameGenres, []);
+  assert.deepEqual(
+    profileInput.parse({ ...first, gameGenres: [4, 3, 7, 5, 10, 14] })
+      .gameGenres,
+    [4, 3, 7, 5, 10, 14],
+  );
+  assert.deepEqual(
+    profileInput.parse({ ...first, gameGenres: [7, 7] }).gameGenres,
+    [7],
+  );
+  for (const gameGenres of [
+    [35],
+    [0],
+    [4.5],
+    ["4"],
+    null,
+    [4, 3, 7, 5, 10, 14, 4],
+  ]) {
+    assert.equal(
+      profileInput.safeParse({ ...first, gameGenres }).success,
+      false,
+    );
+  }
+});

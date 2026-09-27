@@ -64,23 +64,26 @@ function shuffled<T>(items: T[]) {
   return result;
 }
 
+// Both providers use the same preference policy: shared tastes first, then
+// any genre either partner likes. An empty union leaves genres unrestricted.
+function genreSearches(preferences: number[][]): number[][] {
+  const combined = [...new Set(preferences.flat())];
+  const common = combined.filter((genre) =>
+    preferences.every((genres) => genres.includes(genre)),
+  );
+  return common.length && common.length < combined.length
+    ? [common, combined]
+    : [combined];
+}
+
 async function movies(
   room: Room,
   seen: Set<string>,
   max: number,
 ): Promise<Activity[]> {
-  const combined = [
-    ...new Set(room.profiles.flatMap((profile) => profile.genres)),
-  ];
-  const common = combined.filter((genre) =>
-    room.profiles.every((profile) => profile.genres.includes(genre)),
+  const searches = genreSearches(
+    room.profiles.map((profile) => profile.genres),
   );
-  // Search shared tastes first, including later pages, before broadening to
-  // any genre either partner likes. Empty preferences leave genres unrestricted.
-  const searches =
-    common.length && common.length < combined.length
-      ? [common, combined]
-      : [combined];
   const checked = new Set(seen);
   for (const genres of searches) {
     for (let page = 1; page <= 5; page++) {
@@ -153,7 +156,7 @@ type RawgGame = {
   genres?: { name: string }[];
 };
 
-async function games(seen: Set<string>): Promise<Activity[]> {
+async function games(room: Room, seen: Set<string>): Promise<Activity[]> {
   const apiKey = process.env.RAWG_API_KEY?.trim();
   if (!apiKey) return [];
 
@@ -163,45 +166,53 @@ async function games(seen: Set<string>): Promise<Activity[]> {
   url.searchParams.set("ordering", "-rating");
   url.searchParams.set("page_size", "12");
 
-  for (let page = 1; page <= 5; page++) {
-    url.searchParams.set("page", String(page));
-    const result = await externalJson<{
-      results?: RawgGame[];
-      next?: string | null;
-    }>(url, "RAWG");
-    const eligible = (result.results || [])
-      .filter(
-        (game) =>
-          !wasSeen(
-            {
-              id: `rawg-${game.id}`,
-              title: game.name,
-              kind: "game",
-            } as Activity,
-            seen,
-          ),
-      )
-      .map((game): Activity => ({
-        id: `rawg-${game.id}`,
-        title: game.name,
-        subtitle: [
-          game.rating
-            ? `${game.rating.toFixed(1)} RAWG rating`
-            : "Online co-op",
-          game.genres?.[0]?.name,
-        ]
-          .filter(Boolean)
-          .join(" · "),
-        description:
-          "Try this online co-op game together. Check its supported platforms and access requirements before your date.",
-        minutes: 60,
-        kind: "game",
-        source: "rawg",
-        poster: game.background_image || undefined,
-        url: `https://rawg.io/games/${encodeURIComponent(game.slug)}`,
-      }));
-    if (eligible.length) return shuffled(eligible);
-    if (!result.next) break;
+  const searches = genreSearches(
+    room.profiles.map((profile) => profile.gameGenres ?? []),
+  );
+  for (const genres of searches) {
+    // RAWG uses comma-separated genres for OR matching (TMDB uses pipes).
+    if (genres.length) url.searchParams.set("genres", genres.join(","));
+    else url.searchParams.delete("genres");
+    for (let page = 1; page <= 5; page++) {
+      url.searchParams.set("page", String(page));
+      const result = await externalJson<{
+        results?: RawgGame[];
+        next?: string | null;
+      }>(url, "RAWG");
+      const eligible = (result.results || [])
+        .filter(
+          (game) =>
+            !wasSeen(
+              {
+                id: `rawg-${game.id}`,
+                title: game.name,
+                kind: "game",
+              } as Activity,
+              seen,
+            ),
+        )
+        .map((game): Activity => ({
+          id: `rawg-${game.id}`,
+          title: game.name,
+          subtitle: [
+            game.rating
+              ? `${game.rating.toFixed(1)} RAWG rating`
+              : "Online co-op",
+            game.genres?.[0]?.name,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          description:
+            "Try this online co-op game together. Check its supported platforms and access requirements before your date.",
+          minutes: 60,
+          kind: "game",
+          source: "rawg",
+          poster: game.background_image || undefined,
+          url: `https://rawg.io/games/${encodeURIComponent(game.slug)}`,
+        }));
+      if (eligible.length) return shuffled(eligible);
+      if (!result.next) break;
+    }
   }
   return [];
 }
@@ -377,7 +388,7 @@ export async function suggest(room: Room, demo: boolean) {
     ? movies(room, seen, low)
     : Promise.resolve(demo ? demoIdeas("movie", seen) : []);
   const gameRequest = process.env.RAWG_API_KEY
-    ? games(seen)
+    ? games(room, seen)
     : Promise.resolve(demo ? demoIdeas("game", seen) : []);
   const recipeRequest =
     demo && !process.env.TMDB_READ_ACCESS_TOKEN && !process.env.RAWG_API_KEY

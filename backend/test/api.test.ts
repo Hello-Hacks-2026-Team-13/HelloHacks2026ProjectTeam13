@@ -106,6 +106,25 @@ test("API: real pairing, private reads, three suggestions, two votes, cancellati
     );
     assert.equal((await call("/state", c)).data.room, null);
     assert.equal((await call("/state", b)).data.room.profiles.length, 2);
+    const preferences = await call("/preferences", a, "PUT", {
+      profile: { ...profile, gameGenres: [4, 7] },
+    });
+    assert.equal(preferences.status, 200);
+    await stop();
+    await start();
+    const persistedProfiles = (await call("/state", b)).data.room.profiles;
+    assert.deepEqual(
+      persistedProfiles.find((p: any) => p.id === a).gameGenres,
+      [4, 7],
+    );
+    assert.deepEqual(
+      persistedProfiles.find((p: any) => p.id === b).gameGenres,
+      [],
+    );
+    assert.deepEqual(
+      persistedProfiles.find((p: any) => p.id === a).genres,
+      profile.genres,
+    );
     const ideas = await call("/suggestions", a, "POST");
     assert.equal(ideas.data.offers.length, 3);
     const id = ideas.data.offers[0].id;

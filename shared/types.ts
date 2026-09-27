@@ -8,6 +8,8 @@ export type Profile = {
   endHour: number;
   days: number[];
   genres: number[];
+  // Older saved profiles omit this field; omission means no game preference.
+  gameGenres?: number[];
   duration: number;
 };
 export type Activity = {
