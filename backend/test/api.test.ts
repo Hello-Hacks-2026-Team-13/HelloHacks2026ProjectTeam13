@@ -18,6 +18,7 @@ test("API: real pairing, private reads, three suggestions, two votes, cancellati
         ...process.env,
         PORT: String(port),
         APP_MODE: "demo",
+        TOKEN_ENCRYPTION_KEY: "",
         NODE_ENV: "test",
         DEMO_DATA_DIR: dir,
         TMDB_READ_ACCESS_TOKEN: "",
@@ -153,6 +154,35 @@ test("API: real pairing, private reads, three suggestions, two votes, cancellati
       ).status,
       400,
     );
+    // An outsider cannot remove a pair; removal frees both accounts.
+    assert.equal((await call("/pair/remove", c, "POST")).status, 409);
+    assert.equal((await call("/pair/remove", a, "POST")).status, 200);
+    assert.equal((await call("/state", a)).data.room, null);
+    assert.equal((await call("/state", b)).data.room, null);
+    const solo = await call("/pair/create", a, "POST", { profile });
+    const other = await call("/pair/create", c, "POST", { profile });
+    assert.equal(
+      (
+        await call("/pair/join", a, "POST", {
+          code: other.data.code,
+          profile,
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await call("/pair/join", b, "POST", {
+          code: solo.data.code,
+          profile,
+        })
+      ).status,
+      409,
+    );
+    await stop();
+    await start();
+    assert.equal((await call("/state", a)).data.room.profiles.length, 2);
+    assert.equal((await call("/state", b)).data.room, null);
   } finally {
     await stop();
     await rm(dir, { recursive: true, force: true });
