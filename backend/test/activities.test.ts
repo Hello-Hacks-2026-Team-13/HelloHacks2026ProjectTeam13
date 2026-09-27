@@ -27,6 +27,12 @@ function providers(
     failGame?: boolean;
     repeatRecipe?: boolean;
     unavailableMovies?: boolean;
+    movieSearch?: (
+      genres: string | null,
+      page: number,
+    ) => { ids: number[]; totalPages: number };
+    runtimeFor?: (id: number) => number;
+    unavailableMovieIds?: number[];
   } = {},
 ) {
   process.env.TMDB_READ_ACCESS_TOKEN = "test-token";
@@ -39,16 +45,29 @@ function providers(
     const page = Number(url.searchParams.get("page") || 1);
     let data: unknown;
     if (url.hostname === "api.themoviedb.org") {
-      if (url.pathname.includes("discover"))
+      const id = Number(url.pathname.split("/")[3]);
+      if (url.pathname.includes("discover")) {
+        const search = options.movieSearch?.(
+          url.searchParams.get("with_genres"),
+          page,
+        ) || { ids: [page], totalPages: 2 };
         data = {
-          results: [{ id: page, title: `Movie ${page}`, overview: "Movie" }],
-          total_pages: 2,
+          results: search.ids.map((id) => ({
+            id,
+            title: `Movie ${id}`,
+            overview: "Movie",
+          })),
+          total_pages: search.totalPages,
         };
-      else if (url.pathname.endsWith("/watch/providers"))
+      } else if (url.pathname.endsWith("/watch/providers"))
         data = {
-          results: options.unavailableMovies ? {} : { CA: { rent: [{}] } },
+          results:
+            options.unavailableMovies ||
+            options.unavailableMovieIds?.includes(id)
+              ? {}
+              : { CA: { rent: [{}] } },
         };
-      else data = { runtime: 95 };
+      else data = { runtime: options.runtimeFor?.(id) ?? 95 };
     } else if (url.hostname === "api.rawg.io") {
       if (options.failGame) return new Response("", { status: 503 });
       data = {
@@ -110,13 +129,11 @@ test("repeated random recipes cannot silently repeat or partly replace a set", a
   assert.equal(JSON.stringify(state), before);
 });
 
-test("provider failure, incompatible availability, and no shared genres keep the old set", async (t) => {
+test("provider failure and incompatible availability keep the old set", async (t) => {
   providers(t, { failGame: true });
   const state = room();
   await assert.rejects(suggest(state, [], false), /game provider unavailable/);
   assert.deepEqual(state.offers, []);
-  state.profiles[1].genres = [18];
-  await assert.rejects(suggest(state, [], false), /no unseen suitable movie/);
   state.profiles[0].duration = 60;
   await assert.rejects(suggest(state, [], false), /90-minute/);
 });
@@ -211,5 +228,133 @@ test("calendar or plan conflicts are distinguished from incompatible saved hours
       false,
     ),
     /Calendar conflicts or existing plans.*at most 0 minutes/,
+  );
+});
+
+function movieQueries(urls: string[]) {
+  return urls
+    .map((url) => new URL(url))
+    .filter((url) => url.pathname.includes("discover/movie"));
+}
+
+test("different tastes use Adventure OR Animation OR Mystery, without requiring overlap", async (t) => {
+  const urls = providers(t, {
+    movieSearch: (genres) => ({
+      ids: genres === "12|16|9648" ? [31] : [],
+      totalPages: 1,
+    }),
+  });
+  const state = room();
+  state.profiles[0].genres = [12, 16];
+  state.profiles[1].genres = [9648];
+  const result = await suggest(state, [], false);
+  assert.equal(result.offers[0].activity.id, "tmdb-31");
+  assert.equal(result.offers.length, 3);
+  assert.deepEqual(
+    movieQueries(urls).map((url) => url.searchParams.get("with_genres")),
+    ["12|16|9648"],
+  );
+});
+
+test("shared genres stay ahead of either-partner genres even on later pages", async (t) => {
+  const urls = providers(t, {
+    movieSearch: (genres, page) => ({
+      ids: genres === "16" ? [page] : [99],
+      totalPages: 2,
+    }),
+  });
+  const state = room();
+  state.profiles[0].genres = [12, 16];
+  state.profiles[1].genres = [16, 9648];
+  state.suggestionHistory = ["tmdb-1"];
+  const result = await suggest(state, [], false);
+  assert.equal(result.offers[0].activity.id, "tmdb-2");
+  assert.deepEqual(
+    movieQueries(urls).map((url) => url.searchParams.get("with_genres")),
+    ["16", "16"],
+  );
+});
+
+test("fallback broadens genres but still excludes repeats, long runtimes, and unavailable movies", async (t) => {
+  const urls = providers(t, {
+    movieSearch: (genres) => ({
+      ids: genres === "16" ? [1, 2, 3] : [1, 2, 3, 4, 5, 6],
+      totalPages: 1,
+    }),
+    runtimeFor: (id) => ([2, 4].includes(id) ? 180 : 95),
+    unavailableMovieIds: [3, 5],
+  });
+  const state = room();
+  state.profiles[0].genres = [12, 16];
+  state.profiles[1].genres = [16, 9648];
+  state.suggestionHistory = ["tmdb-1"];
+  const result = await suggest(state, [], false);
+  assert.equal(result.offers[0].activity.id, "tmdb-6");
+  assert.deepEqual(
+    movieQueries(urls).map((url) => url.searchParams.get("with_genres")),
+    ["16", "12|16|9648"],
+  );
+  assert.equal(
+    urls.filter((url) => new URL(url).pathname === "/3/movie/2").length,
+    1,
+  );
+  assert.equal(
+    urls.filter((url) => new URL(url).pathname === "/3/movie/1").length,
+    0,
+  );
+  commitSuggestions(state, structuredClone(state), result.offers);
+  const before = JSON.stringify(state);
+  await assert.rejects(suggest(state, [], false), /no unseen suitable movie/);
+  assert.equal(JSON.stringify(state), before);
+});
+
+test("an empty shared-genre result falls back to the deduplicated union", async (t) => {
+  const urls = providers(t, {
+    movieSearch: (genres) => ({
+      ids: genres === "16" ? [] : [7],
+      totalPages: 1,
+    }),
+  });
+  const state = room();
+  state.profiles[0].genres = [12, 16, 16];
+  state.profiles[1].genres = [16, 9648, 9648];
+  assert.equal(
+    (await suggest(state, [], false)).offers[0].activity.id,
+    "tmdb-7",
+  );
+  assert.deepEqual(
+    movieQueries(urls).map((url) => url.searchParams.get("with_genres")),
+    ["16", "12|16|9648"],
+  );
+});
+
+test("identical tastes do not repeat the same exhausted genre search", async (t) => {
+  const urls = providers(t, {
+    movieSearch: () => ({ ids: [], totalPages: 1 }),
+  });
+  await assert.rejects(suggest(room(), [], false), /no unseen suitable movie/);
+  assert.equal(movieQueries(urls).length, 1);
+});
+
+test("one partner with no genre preference uses the other partner's genres", async (t) => {
+  const urls = providers(t);
+  const state = room();
+  state.profiles[0].genres = [];
+  state.profiles[1].genres = [12, 16];
+  assert.equal((await suggest(state, [], false)).offers.length, 3);
+  assert.equal(movieQueries(urls)[0].searchParams.get("with_genres"), "12|16");
+});
+
+test("both partners with no genre preference can receive unrestricted genre suggestions", async (t) => {
+  const urls = providers(t);
+  const state = room();
+  state.profiles.forEach((profile) => {
+    profile.genres = [];
+  });
+  assert.equal((await suggest(state, [], false)).offers.length, 3);
+  assert.equal(movieQueries(urls)[0].searchParams.has("with_genres"), false);
+  assert.equal(
+    movieQueries(urls)[0].searchParams.get("include_adult"),
+    "false",
   );
 });

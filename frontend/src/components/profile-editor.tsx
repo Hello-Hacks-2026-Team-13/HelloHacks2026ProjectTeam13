@@ -144,8 +144,8 @@ export function ProfileEditor({
               );
             })}
           </View>
-          <Heading detail="These genres guide movie suggestions.">
-            Movies you both enjoy
+          <Heading detail="Shared genres come first. If none fit, we try any genre either of you likes. Leave all unselected for no genre preference.">
+            Movies you enjoy
           </Heading>
           <View style={styles.chips}>
             {GENRES.map((genre) => {

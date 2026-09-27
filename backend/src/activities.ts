@@ -37,54 +37,66 @@ async function movies(
   seen: Set<string>,
   max: number,
 ): Promise<Activity[]> {
-  const common = room.profiles[0].genres.filter((g) =>
-    room.profiles[1].genres.includes(g),
+  const combined = [
+    ...new Set(room.profiles.flatMap((profile) => profile.genres)),
+  ];
+  const common = combined.filter((genre) =>
+    room.profiles.every((profile) => profile.genres.includes(genre)),
   );
-  if (!common.length) return [];
-  for (let page = 1; page <= 5; page++) {
-    const result = await tmdb(
-      `/discover/movie?sort_by=popularity.desc&include_adult=false&vote_count.gte=100&with_genres=${common.join("|")}&with_runtime.lte=${max}&page=${page}`,
-    );
-    const candidates = await Promise.all(
-      (result.results || [])
-        .filter((movie: any) => !seen.has(`tmdb-${movie.id}`))
-        .map(async (movie: any) => {
-          const [details, providers] = await Promise.all([
-            tmdb(`/movie/${movie.id}`),
-            tmdb(`/movie/${movie.id}/watch/providers`),
-          ]);
-          if (
-            !details.runtime ||
-            details.runtime > max ||
-            !room.profiles.every((p) => {
-              const region = providers.results?.[p.country];
-              return (
-                region &&
-                ["flatrate", "free", "ads", "rent", "buy"].some(
-                  (k) => region[k]?.length,
-                )
-              );
-            })
-          )
-            return null;
-          return {
-            id: `tmdb-${movie.id}`,
-            title: movie.title,
-            subtitle: `${details.runtime} minutes · Available in both countries`,
-            description: movie.overview,
-            minutes: details.runtime,
-            kind: "movie",
-            source: "tmdb",
-            poster: movie.poster_path
-              ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
-              : undefined,
-            url: `https://www.themoviedb.org/movie/${movie.id}/watch`,
-          } as Activity;
-        }),
-    );
-    const eligible = candidates.filter((v): v is Activity => v !== null);
-    if (eligible.length) return eligible;
-    if (!result.results?.length || page >= (result.total_pages || 1)) break;
+  // Search shared tastes first, including later pages, before broadening to
+  // any genre either partner likes. Empty preferences leave genres unrestricted.
+  const searches =
+    common.length && common.length < combined.length
+      ? [common, combined]
+      : [combined];
+  const checked = new Set(seen);
+  for (const genres of searches) {
+    for (let page = 1; page <= 5; page++) {
+      const result = await tmdb(
+        `/discover/movie?sort_by=popularity.desc&include_adult=false&vote_count.gte=100&${genres.length ? `with_genres=${genres.join("|")}&` : ""}with_runtime.lte=${max}&page=${page}`,
+      );
+      const candidates = await Promise.all(
+        (result.results || [])
+          .filter((movie: any) => !checked.has(`tmdb-${movie.id}`))
+          .map(async (movie: any) => {
+            checked.add(`tmdb-${movie.id}`);
+            const [details, providers] = await Promise.all([
+              tmdb(`/movie/${movie.id}`),
+              tmdb(`/movie/${movie.id}/watch/providers`),
+            ]);
+            if (
+              !details.runtime ||
+              details.runtime > max ||
+              !room.profiles.every((p) => {
+                const region = providers.results?.[p.country];
+                return (
+                  region &&
+                  ["flatrate", "free", "ads", "rent", "buy"].some(
+                    (k) => region[k]?.length,
+                  )
+                );
+              })
+            )
+              return null;
+            return {
+              id: `tmdb-${movie.id}`,
+              title: movie.title,
+              subtitle: `${details.runtime} minutes · Available in both countries`,
+              description: movie.overview,
+              minutes: details.runtime,
+              kind: "movie",
+              source: "tmdb",
+              poster: movie.poster_path
+                ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+                : undefined,
+              url: `https://www.themoviedb.org/movie/${movie.id}/watch`,
+            } as Activity;
+          }),
+      );
+      const eligible = candidates.filter((v): v is Activity => v !== null);
+      if (eligible.length) return eligible;
+      if (!result.results?.length || page >= (result.total_pages || 1)) break;
+    }
   }
   return [];
 }
