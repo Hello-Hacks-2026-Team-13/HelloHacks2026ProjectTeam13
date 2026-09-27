@@ -1,6 +1,8 @@
 node_modules/
 dist/
 frontend/dist/
+frontend/.expo/
+frontend/web-build/
 .DS_Store
 .env
 .env.*

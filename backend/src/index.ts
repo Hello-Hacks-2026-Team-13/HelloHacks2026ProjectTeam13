@@ -9,6 +9,8 @@ import { fileURLToPath } from "node:url";
 import {
   live,
   origin,
+  apiOrigin,
+  allowedOrigins,
   calendarReady,
   rawgReady,
   mealdbReady,
@@ -33,6 +35,7 @@ import {
 } from "./domain.ts";
 import {
   startCalendar,
+  resumeCalendarStart,
   finishCalendar,
   disconnectCalendar,
   calendarBusy,
@@ -79,12 +82,29 @@ app.use(
 );
 app.use("/api", (req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
-  if (
-    req.method !== "GET" &&
-    req.headers.origin &&
-    req.headers.origin !== origin
-  ) {
-    res.status(403).json({ error: "Unrecognized application origin." });
+  res.setHeader("Vary", "Origin");
+  const requestOrigin = req.headers.origin?.replace(/\/$/, "");
+  const nativeClient = req.headers["x-across-client"] === "native";
+  if (requestOrigin) {
+    if (!allowedOrigins.has(requestOrigin) && !nativeClient) {
+      res.status(403).json({ error: "Unrecognized application origin." });
+      return;
+    }
+    if (allowedOrigins.has(requestOrigin)) {
+      res.setHeader("Access-Control-Allow-Origin", requestOrigin);
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+      res.setHeader(
+        "Access-Control-Allow-Methods",
+        "GET,POST,PUT,DELETE,OPTIONS",
+      );
+      res.setHeader(
+        "Access-Control-Allow-Headers",
+        "Authorization,Content-Type",
+      );
+    }
+  }
+  if (req.method === "OPTIONS") {
+    res.sendStatus(204);
     return;
   }
   next();
@@ -107,7 +127,43 @@ app.post("/api/demo/session", async (_req, res) => {
   }
   res.json({ token: await newDemoUser() });
 });
+app.get("/api/calendar/start", async (req, res, next) => {
+  try {
+    const { state, native } = z
+      .object({
+        state: z.string().length(64),
+        native: z.enum(["0", "1"]).optional(),
+      })
+      .parse(req.query);
+    const url = await resumeCalendarStart(state);
+    res.cookie("calendar_state", state, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: apiOrigin.startsWith("https:"),
+      path: "/api/calendar",
+      maxAge: 600000,
+    });
+    if (native === "1") {
+      res.cookie("calendar_return", "native", {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: apiOrigin.startsWith("https:"),
+        path: "/api/calendar",
+        maxAge: 600000,
+      });
+    }
+    res.redirect(url);
+  } catch (error) {
+    next(error);
+  }
+});
 app.get("/api/calendar/callback", async (req, res) => {
+  const native =
+    req.headers.cookie
+      ?.split(";")
+      .map((value) => value.trim())
+      .find((value) => value.startsWith("calendar_return="))
+      ?.split("=")[1] === "native";
   try {
     const { code, state } = z
       .object({ code: z.string(), state: z.string() })
@@ -124,10 +180,21 @@ app.get("/api/calendar/callback", async (req, res) => {
     )
       throw new Error("Calendar state mismatch");
     res.clearCookie("calendar_state", { path: "/api/calendar" });
+    res.clearCookie("calendar_return", { path: "/api/calendar" });
     await finishCalendar(code, state);
-    res.redirect(`${origin}/?calendar=connected`);
+    res.redirect(
+      native
+        ? "across:///connections?calendar=connected"
+        : `${origin}/?calendar=connected`,
+    );
   } catch {
-    res.redirect(`${origin}/?calendar=error`);
+    res.clearCookie("calendar_state", { path: "/api/calendar" });
+    res.clearCookie("calendar_return", { path: "/api/calendar" });
+    res.redirect(
+      native
+        ? "across:///connections?calendar=error"
+        : `${origin}/?calendar=error`,
+    );
   }
 });
 app.use("/api", async (req, res, next) => {
@@ -318,11 +385,14 @@ app.post("/api/calendar/connect", async (_req, res) => {
   res.cookie("calendar_state", state, {
     httpOnly: true,
     sameSite: "lax",
-    secure: origin.startsWith("https:"),
+    secure: apiOrigin.startsWith("https:"),
     path: "/api/calendar",
     maxAge: 600000,
   });
-  res.json({ url });
+  const browserUrl = new URL("/api/calendar/start", apiOrigin);
+  browserUrl.searchParams.set("state", state);
+  browserUrl.searchParams.set("native", "1");
+  res.json({ url, browserUrl: browserUrl.toString() });
 });
 app.delete("/api/calendar", async (_req, res) => {
   await disconnectCalendar(res.locals.userId);
@@ -352,7 +422,7 @@ app.use(
     res.status(error instanceof ZodError ? 400 : 409).json({ error: message });
   },
 );
-app.listen(port, process.env.HOST || "127.0.0.1", () =>
+app.listen(port, process.env.HOST || "0.0.0.0", () =>
   console.log(
     `Across API: http://localhost:${port} (${live ? "live" : "demo"})`,
   ),

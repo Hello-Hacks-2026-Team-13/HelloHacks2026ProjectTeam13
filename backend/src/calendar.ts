@@ -1,9 +1,9 @@
 import { randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
 import { admin, hash, mutateRoom } from "./store.ts";
-import { calendarReady, origin } from "./config.ts";
+import { apiOrigin, calendarReady } from "./config.ts";
 import type { Room, Slot } from "../../shared/types.ts";
 const redirectUri = () =>
-  process.env.GOOGLE_REDIRECT_URI || `${origin}/api/calendar/callback`;
+  process.env.GOOGLE_REDIRECT_URI || `${apiOrigin}/api/calendar/callback`;
 function seal(value: unknown) {
   const iv = randomBytes(12);
   const cipher = createCipheriv(
@@ -62,6 +62,10 @@ export async function startCalendar(userId: string) {
     expires_at: new Date(Date.now() + 600000).toISOString(),
   });
   if (error) throw error;
+  return { url: googleCalendarUrl(state), state };
+}
+
+function googleCalendarUrl(state: string) {
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   url.search = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID!,
@@ -72,7 +76,20 @@ export async function startCalendar(userId: string) {
     prompt: "consent",
     state,
   }).toString();
-  return { url: url.toString(), state };
+  return url.toString();
+}
+
+export async function resumeCalendarStart(state: string) {
+  if (!admin || !calendarReady) throw new Error("Calendar is not configured.");
+  const { data, error } = await admin
+    .from("oauth_states")
+    .select("digest")
+    .eq("digest", hash(state))
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+  if (error || !data)
+    throw new Error("Calendar connection expired. Please try again.");
+  return googleCalendarUrl(state);
 }
 export async function finishCalendar(code: string, state: string) {
   if (!admin || !calendarReady) throw new Error("Calendar is not configured.");

@@ -9,8 +9,8 @@
     "frontend"
   ],
   "scripts": {
-    "dev": "concurrently -k -n api,web -c cyan,magenta \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
-    "build": "npm run typecheck --workspace=backend && npm run build --workspace=frontend",
+    "dev": "concurrently -k -n api,expo -c cyan,magenta \"npm run dev --workspace=backend\" \"npm run start --workspace=frontend\"",
+    "build": "npm run typecheck --workspace=backend && npm run typecheck --workspace=frontend && npm run build --workspace=frontend",
     "start": "npm run start --workspace=backend",
     "test": "npm run test --workspace=backend",
     "format": "prettier --write \"frontend/src/**/*.{ts,tsx,css}\" \"backend/{src,test}/**/*.ts\" \"shared/*.ts\" \"*.md\""

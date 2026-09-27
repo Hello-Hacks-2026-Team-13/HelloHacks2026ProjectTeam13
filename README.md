@@ -2,7 +2,7 @@
 
 A first draft of a long-distance relationship app: **pair accounts → set preferences and available hours → find overlap → show three activities → both accept → save the plan**.
 
-Built with React + TypeScript + Vite, Motion, Lucide, and an Express/Node API written in TypeScript. Supabase provides live authentication and shared persistence. Google Calendar contributes busy times. TMDB, RAWG, and TheMealDB provide movie, co-op game, and recipe ideas.
+The mobile and web client is built with React Native, Expo, TypeScript, and Expo Router. The Node.js backend uses Express and TypeScript. Supabase provides live authentication and shared persistence. Google Calendar contributes busy times. TMDB, RAWG, and TheMealDB provide movie, co-op game, and recipe ideas. The previous React/Vite client is kept in `frontend_old` as a reference.
 
 ## Try the draft
 
@@ -13,17 +13,19 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:5173>. The API runs on port 3001. No credentials are needed for the local demo.
+Expo starts the backend and frontend together. Open the Expo URL printed in the terminal, press `w` for the web app, or scan the QR code with Expo Go. The local web URL is usually <http://localhost:8081>; the API runs on port 3001. No provider credentials are needed for the demo.
+
+For a physical phone, copy `frontend/.env.example` to `frontend/.env` and set `EXPO_PUBLIC_API_URL` to your computer's LAN address, such as `http://192.168.1.42:3001`. Keep the phone and computer on the same network. The backend binds to the local network in development; your firewall may ask whether to allow Node.js.
 
 1. Enter a name and create a space.
-2. Choose **Add demo partner** in the invite dialog, or join with the invite code from a second browser profile.
-3. Edit **Preferences** for your time zone, available weekdays/hours, movie genres, country, and maximum date length. In demo mode, **Our time** also lets you edit Alex's hours.
+2. Choose **Add demo partner** from the home screen or Connections, or join with the invite code from another client.
+3. Edit **Our time** for your time zone, available weekdays/hours, movie genres, country, and maximum date length. In demo mode, **Our time** also lets you edit the sample partner's hours.
 4. Choose **Find our next date**. Each of the three suggestions includes a time that fits the whole activity.
 5. Suggest a date. Your suggestion counts as your acceptance.
 6. Use **Demo: Alex says yes**, or accept from the other browser profile. Only then does the plan become saved.
-7. Download a calendar file from the saved plan if you want to import it into your calendar.
+7. Export a saved plan as an `.ics` calendar file or share its details.
 
-Demo sessions are isolated by a browser-stored random token; state persists in ignored `backend/.data/demo.json`. The demo is for local development and refuses to start with `NODE_ENV=production`. Demo accounts and plans do not migrate into live mode.
+Demo sessions are isolated by a random token stored in the browser or device; state persists in ignored `backend/.data/demo.json`. The demo is for local development and refuses to start with `NODE_ENV=production`. Demo accounts and plans do not migrate into live mode.
 
 ## Connect your existing projects
 
@@ -36,18 +38,22 @@ openssl rand -hex 32
 
 Use the generated hex value for `TOKEN_ENCRYPTION_KEY` and keep it stable. Replacing it requires reconnecting calendars. Leave `APP_MODE=demo` until the setup below is complete.
 
+If you already have `backend/.env`, update `APP_ORIGIN` to the Expo Web URL (`http://localhost:8081`) and set `API_ORIGIN` and `GOOGLE_REDIRECT_URI` to the backend URL shown below. Keep your existing secret values when editing it.
+
+`APP_ORIGIN` is the Expo Web origin used for browser CORS and calendar callback redirects. The example uses `http://localhost:8081`. `API_ORIGIN` is the backend address used for Google OAuth callbacks. When testing Expo Web from a phone, add its web origin (for example, `http://192.168.1.42:8081`) to `APP_ALLOWED_ORIGINS`. For the native app, set `EXPO_PUBLIC_API_URL` in `frontend/.env` to the computer's LAN API address; native API requests do not use the browser CORS allowlist.
+
 ### 1. Supabase: accounts and plans
 
 - Run [`supabase/schema.sql`](supabase/schema.sql) once in your project's SQL Editor. It creates `rooms`, `memberships`, `calendar_tokens`, `oauth_states`, and two transactional pairing functions. Also run [`supabase/pair_removal.sql`](supabase/pair_removal.sql) to install the pairing removal function and allow solo accounts to switch spaces. If you applied an earlier version of that file, run the updated one again. Review existing table names before applying to a project that already has data.
-- Set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY` in `backend/.env` from your project's **Connect** dialog or **Settings → API Keys**. The publishable key is sent to the browser for Supabase Auth; the secret key stays on the Express server and bypasses RLS, so never expose it in frontend code or a `VITE_` variable.
-- In **Authentication → URL Configuration**, set the Site URL to `http://localhost:5173` and allow `http://localhost:5173` as a redirect URL.
-- Enable email authentication. Sign-in uses emailed magic links with PKCE; open each link in the same browser that requested it.
+- Set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY` in `backend/.env` from your project's **Connect** dialog or **Settings → API Keys**. The publishable key is used by the app for Supabase Auth; the secret key stays on the Express server and bypasses RLS, so never put it in frontend code or an `EXPO_PUBLIC_` variable.
+- In **Authentication → URL Configuration**, set the local web Site URL to `http://localhost:8081` and allow it as a redirect URL. For installed native builds, allow the `across://**` redirect pattern for the app's deep link scheme.
+- Enable email authentication. Sign-in uses emailed magic links with PKCE. For local web, open each link in the same browser that requested it; on native builds, the link returns through the Across app scheme.
 - Supabase's built-in email sender restricts delivery and is rate limited. Configure a custom SMTP provider in Supabase before testing with arbitrary partner email addresses.
 - Set `APP_MODE=live` and restart `npm run dev`. Create two actual accounts, then share a one-use invite code. Codes expire after 24 hours.
 
-Tables have RLS enabled and no browser access policies. All application data requests go through Express, which validates the Supabase access token, derives the user ID from that validated token, and checks membership before using its server-side database client. The secret key never reaches the browser. Invitations are stored as SHA-256 digests. Row locking and a unique user membership prevent double joins; optimistic version checks prevent concurrent acceptances from overwriting each other.
+Tables have RLS enabled and no client access policies. All application data requests go through Express, which validates the Supabase access token, derives the user ID from that validated token, and checks membership before using its server-side database client. The secret key never reaches the app. Invitations are stored as SHA-256 digests. Row locking and a unique user membership prevent double joins; optimistic version checks prevent concurrent acceptances from overwriting each other.
 
-Either partner can remove the pairing from **Connections** after two confirmation steps. This immediately deletes the shared room and plans, memberships, invite, encrypted Google Calendar tokens, and pending OAuth states from Supabase. Individual Supabase sign-in accounts are retained. Google authorization may need to be revoked separately in Google Account settings. After the pairing is removed, either account can join a different space with an invite code or create a new one.
+Either partner can remove the pairing from **Connections** after several confirmation steps. This immediately deletes the shared room and plans, memberships, invite, encrypted Google Calendar tokens, and pending OAuth states from Supabase. Individual Supabase sign-in accounts are retained. Google authorization may need to be revoked separately in Google Account settings. After the pairing is removed, either account can join a different space with an invite code or create a new one.
 
 Partner state refreshes every 10 seconds. This draft uses polling, not Supabase Realtime.
 
@@ -57,11 +63,13 @@ Partner state refreshes every 10 seconds. This draft uses polling, not Supabase 
 - Configure the OAuth consent screen in Google Auth Platform. While the app is in testing, add both testers' Google accounts under Audience / Test users.
 - Add this scope under Data Access: `https://www.googleapis.com/auth/calendar.freebusy`.
 - Create an OAuth client of type **Web application**.
-- Add the exact authorized redirect URI: `http://localhost:5173/api/calendar/callback`.
+- Add the exact authorized redirect URI: `http://localhost:3001/api/calendar/callback`.
 - Put the client ID and client secret into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `backend/.env`. Set `GOOGLE_REDIRECT_URI` to that same redirect URI and set `TOKEN_ENCRYPTION_KEY` as above.
 - Restart the server. Each signed-in partner opens **Connections → Connect Google Calendar** and authorizes their own calendar.
 
 Calendar OAuth is separate from app sign-in. The callback uses an expiring single-use state bound to an HttpOnly SameSite cookie. Refresh tokens are encrypted using AES-256-GCM at rest in Supabase. The server retrieves only primary-calendar busy intervals, not event titles or descriptions, and never returns raw calendar intervals to the partner. Busy times are fetched during matching and rechecked on acceptance. If Google fails, matching/acceptance fails visibly instead of silently treating that calendar as empty.
+
+The native app opens Google in a browser session and returns through the `across` app link. For native Calendar testing, `API_ORIGIN`, `GOOGLE_REDIRECT_URI`, and `EXPO_PUBLIC_API_URL` must point to a backend address reachable from both the phone and Google's callback; use an HTTPS development tunnel or deployed backend. Expo Web on the same computer can use the local addresses above.
 
 This version reads the **primary calendar only**. Calendar selection, push synchronization, and automatically creating Google events are future work. Accepted plans are saved in Supabase and can be exported as `.ics`; export is not two-way sync. Disconnect removes the stored token; Google account permissions can also be revoked from your Google Account settings. Google testing-mode refresh tokens can expire, requiring reconnection.
 
@@ -79,7 +87,7 @@ Curated conversation/creative activities fill remaining slots. TMDB outages show
 
 - Get a RAWG key from [RAWG API docs](https://rawg.io/apidocs) and set `RAWG_API_KEY` in `backend/.env`. The server requests highly rated games tagged for online co-op and adds a link back to RAWG. Follow RAWG's current plan, request limits, and attribution terms.
 - TheMealDB's free developer test key is `1`, so `THEMEALDB_API_KEY=1` works for local development. Replace it with a supporter key if you have one. The server requests one random recipe and links to its recipe/source page.
-- Both services are called only by the backend; keys are not sent to the browser. If RAWG isn't configured or a provider is unavailable, the app keeps the other provider results and curated ideas.
+- Both services are called only by the backend; keys are not sent to the app. If RAWG isn't configured or a provider is unavailable, the app keeps the other provider results and curated ideas.
 - Game ideas reserve 60 minutes and recipe ideas reserve 90 minutes in the shared schedule. Check the game platforms and recipe preparation time before confirming a date.
 
 The relevant settings are in the optional integration section of `backend/.env.example`. Copy it to `backend/.env` if you haven't already, add `RAWG_API_KEY`, and keep `THEMEALDB_API_KEY=1` or replace it with your supporter key. Restart the backend after editing the file. See the [RAWG API docs](https://rawg.io/apidocs) and [TheMealDB API guide](https://www.themealdb.com/docs_api_guide.php) for current access details.
@@ -101,11 +109,13 @@ Live Supabase SQL/auth, Google consent/token refresh, and authenticated TMDB, RA
 ## Project layout
 
 ```text
-frontend/src/App.tsx       Screens, preferences, pairing, and calendar export
-frontend/src/styles.css    Responsive visual design
-frontend/src/lib/api.ts    Demo and Supabase session handling
+frontend/src/app/          Expo Router screens for home, time, ideas, plans, and connections
+frontend/src/lib/across.tsx Demo and Supabase session handling plus API access
+frontend/src/components/   Shared native UI and profile editor
+frontend/.env.example      API URL for local device development
+frontend_old/              Previous React/Vite client retained as a reference
 shared/types.ts            Shared domain types
-backend/src/index.ts       Authenticated API and OAuth callback
+backend/src/index.ts       Authenticated Express API and OAuth callback
 backend/src/domain.ts      Availability matching and acceptance rules
 backend/src/store.ts       Local persistence and Supabase storage
 backend/src/calendar.ts    Google OAuth, encrypted tokens, and free/busy reads
@@ -113,7 +123,7 @@ backend/src/activities.ts  TMDB, RAWG, TheMealDB, and curated date ideas
 backend/test/              Unit and API integration tests
 supabase/schema.sql        Database setup and private access rules
 supabase/pair_removal.sql  Pair removal and solo-space replacement
-backend/.env.example       Required integration settings
+backend/.env.example       Backend and provider integration settings
 ```
 
 ## First-draft boundaries
@@ -128,4 +138,4 @@ backend/.env.example       Required integration settings
 
 ## Deployment later
 
-Build with `npm run build`, set `NODE_ENV=production`, `APP_MODE=live`, `HOST=0.0.0.0`, and run `npm start`. Express serves `frontend/dist` and `/api` from one origin. Set `APP_ORIGIN` to your HTTPS URL and update both Supabase redirect configuration and Google OAuth redirect URI (`https://your-domain/api/calendar/callback`). Keep `tsx` available in the runtime install. If deploying behind a trusted reverse proxy, configure Express trust-proxy explicitly for your host before using IP-based rate limiting. The local demo is not a public hosting mode.
+Build with `npm run build`, set `NODE_ENV=production`, `APP_MODE=live`, `HOST=0.0.0.0`, `APP_ORIGIN=https://your-domain`, and `API_ORIGIN=https://your-domain`, then run `npm start`. Express serves `frontend/dist` and `/api` from one origin. Update Supabase redirect configuration and the Google OAuth redirect URI (`https://your-domain/api/calendar/callback`). Keep `tsx` available in the runtime install. If deploying behind a trusted reverse proxy, configure Express trust-proxy explicitly for your host before using IP-based rate limiting. The local demo is not a public hosting mode.

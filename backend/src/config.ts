@@ -21,7 +21,22 @@ try {
   // apis.env is optional; backend/.env is the documented settings file.
 }
 export const live = process.env.APP_MODE === "live";
-export const origin = process.env.APP_ORIGIN || "http://localhost:5173";
+export const origin = (
+  process.env.APP_ORIGIN || "http://localhost:8081"
+).replace(/\/$/, "");
+export const apiOrigin = (
+  process.env.API_ORIGIN ||
+  (process.env.NODE_ENV === "production"
+    ? origin
+    : `http://localhost:${Number(process.env.PORT) || 3001}`)
+).replace(/\/$/, "");
+export const allowedOrigins = new Set([
+  origin,
+  ...(process.env.APP_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((value) => value.trim().replace(/\/$/, ""))
+    .filter(Boolean),
+]);
 export const calendarReady = Boolean(
   live &&
   process.env.GOOGLE_CLIENT_ID &&
