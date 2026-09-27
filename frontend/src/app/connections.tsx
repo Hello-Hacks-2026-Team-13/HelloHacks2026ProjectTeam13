@@ -18,7 +18,16 @@ import {
 import { newProfile } from "@/components/profile-editor";
 
 export default function ConnectionsScreen() {
-  const { state, config, busy, error, notice, execute } = useAcross();
+  const {
+    state,
+    config,
+    busy,
+    error,
+    notice,
+    execute,
+    authenticated,
+    signOut,
+  } = useAcross();
   const [pairNameDraft, setPairName] = useState<string | null>(null);
   const [pairCode, setPairCode] = useState("");
   const [invite, setInvite] = useState("");
@@ -123,8 +132,8 @@ export default function ConnectionsScreen() {
 
   return (
     <Screen
-      eyebrow="Connections"
-      title="The people and services in your space."
+      header="people"
+      title="Account"
       description="Manage your partner, invite code, and optional calendar access here."
     >
       {error ? (
@@ -138,6 +147,12 @@ export default function ConnectionsScreen() {
         </Notice>
       ) : null}
 
+      <Card>
+        <Heading>Account settings</Heading>
+        <Button kind="quiet" onPress={() => router.push("/time")}>
+          Edit profile, time zone & availability →
+        </Button>
+      </Card>
       <Card>
         <Heading
           detail={
@@ -400,6 +415,11 @@ export default function ConnectionsScreen() {
             </>
           )}
         </Card>
+      ) : null}
+      {authenticated && config?.mode === "live" ? (
+        <Button kind="quiet" onPress={() => void signOut()}>
+          Log out
+        </Button>
       ) : null}
     </Screen>
   );

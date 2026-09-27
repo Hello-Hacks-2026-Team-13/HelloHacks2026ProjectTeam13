@@ -32,7 +32,7 @@ export default function TimeScreen() {
   if (!room || !me) {
     return (
       <Screen
-        eyebrow="Our time"
+        adornment="calendar"
         title="Find the hours that feel good."
         description="Add your usual availability and Across will compare it with your partner’s local schedule."
       >
@@ -58,8 +58,8 @@ export default function TimeScreen() {
 
   return (
     <Screen
-      eyebrow="Our time"
-      title="Find a window that works for both."
+      adornment="calendar"
+      title="Our time"
       description="Choose your usual days and hours. Times are stored in your time zone and compared with your partner’s, including across daylight changes."
     >
       {error ? (

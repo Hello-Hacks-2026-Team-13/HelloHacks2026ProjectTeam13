@@ -1,4 +1,7 @@
 import type { PropsWithChildren, ReactNode } from "react";
+import { Image } from "expo-image";
+import { PairHeader } from "./figma-ui";
+import { palette, fontFamily, artwork } from "@/constants/design";
 import {
   ActivityIndicator,
   Pressable,
@@ -11,31 +14,20 @@ import {
 import type { StyleProp, TextStyle, ViewStyle } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-export const palette = {
-  ink: "#25221F",
-  muted: "#716B65",
-  paper: "#FBF8F3",
-  surface: "#FFFFFF",
-  line: "#E9E2D8",
-  coral: "#CB6554",
-  coralDark: "#9F493C",
-  coralPale: "#F8E9E5",
-  blue: "#506C82",
-  bluePale: "#EAF0F4",
-  green: "#376C51",
-  greenPale: "#E8F2EB",
-  amber: "#8A6228",
-  amberPale: "#F8F0E1",
-  danger: "#A53D3D",
-  dangerPale: "#F8EAEA",
-};
+export { palette } from "@/constants/design";
 
 export function Screen({
   eyebrow,
   title,
   description,
   children,
+  header = "clocks",
+  hero,
+  adornment,
 }: PropsWithChildren<{
+  header?: "clocks" | "people" | "none";
+  hero?: keyof typeof artwork;
+  adornment?: keyof typeof artwork;
   eyebrow?: string;
   title: string;
   description?: string;
@@ -48,13 +40,28 @@ export function Screen({
         automaticallyAdjustKeyboardInsets
       >
         <View style={styles.page}>
-          <Text style={styles.brand}>
-            across<Text style={styles.brandDot}>.</Text>
-          </Text>
+          {hero ? (
+            <Image
+              source={artwork[hero]}
+              contentFit="cover"
+              style={styles.heroImage}
+            />
+          ) : header !== "none" ? (
+            <PairHeader people={header === "people"} />
+          ) : null}
           {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-          <Text accessibilityRole="header" style={styles.pageTitle}>
-            {title}
-          </Text>
+          <View style={styles.titleRow}>
+            <Text accessibilityRole="header" style={styles.pageTitle}>
+              {title}
+            </Text>
+            {adornment ? (
+              <Image
+                source={artwork[adornment]}
+                contentFit="contain"
+                style={styles.adornment}
+              />
+            ) : null}
+          </View>
           {description ? (
             <Text style={styles.pageDescription}>{description}</Text>
           ) : null}
@@ -133,7 +140,7 @@ export function Field({
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#938A81"
+        placeholderTextColor="#858A9D"
         keyboardType={keyboardType}
         autoCapitalize={autoCapitalize}
         autoComplete={autoComplete}
@@ -285,13 +292,14 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1, paddingBottom: 36 },
   page: {
     width: "100%",
-    maxWidth: 760,
+    maxWidth: 900,
     alignSelf: "center",
-    paddingHorizontal: 22,
-    paddingTop: 10,
+    paddingHorizontal: 20,
+    paddingTop: 24,
   },
   brand: {
     color: palette.ink,
+    fontFamily,
     fontSize: 23,
     fontWeight: "800",
     letterSpacing: -1.2,
@@ -299,80 +307,97 @@ const styles = StyleSheet.create({
   },
   brandDot: { color: palette.coral },
   eyebrow: {
-    color: palette.coralDark,
-    fontSize: 12,
+    color: palette.muted,
+    fontFamily,
+    fontSize: 11,
     letterSpacing: 1.4,
     fontWeight: "800",
     textTransform: "uppercase",
     marginBottom: 8,
   },
+  heroImage: {
+    width: "100%",
+    aspectRatio: 433 / 314,
+    maxHeight: 305,
+    marginBottom: 20,
+    borderRadius: 20,
+  },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  adornment: { width: 32, height: 30 },
   pageTitle: {
+    flexShrink: 1,
     color: palette.ink,
-    fontSize: 32,
+    fontFamily,
+    fontSize: 28,
     fontWeight: "700",
-    letterSpacing: -0.8,
-    lineHeight: 38,
+    letterSpacing: -0.6,
+    lineHeight: 34,
   },
   pageDescription: {
     color: palette.muted,
+    fontFamily,
     fontSize: 16,
     lineHeight: 24,
     marginTop: 9,
     maxWidth: 560,
   },
-  pageBody: { gap: 16, marginTop: 24 },
+  pageBody: { gap: 22, marginTop: 26 },
   card: {
     backgroundColor: palette.surface,
     borderColor: palette.line,
     borderWidth: 1,
-    borderRadius: 22,
-    padding: 18,
+    borderRadius: 20,
+    padding: 20,
+    boxShadow: "0px 4px 22px rgba(63,65,78,0.045)",
     gap: 14,
   },
   headingWrap: { gap: 4 },
   sectionTitle: {
     color: palette.ink,
+    fontFamily,
     fontSize: 19,
     lineHeight: 25,
     fontWeight: "700",
   },
-  helper: { color: palette.muted, fontSize: 14, lineHeight: 20 },
-  body: { color: palette.muted, fontSize: 15, lineHeight: 22 },
+  helper: { color: palette.muted, fontFamily, fontSize: 14, lineHeight: 20 },
+  body: { color: palette.muted, fontFamily, fontSize: 15, lineHeight: 22 },
   field: { gap: 7 },
   label: {
     color: palette.ink,
+    fontFamily,
     fontSize: 14,
     lineHeight: 19,
     fontWeight: "600",
   },
   input: {
-    minHeight: 48,
+    minHeight: 54,
     borderWidth: 1,
-    borderColor: "#DDD5CA",
-    borderRadius: 13,
+    borderColor: "#F2F3F7",
+    borderRadius: 15,
     paddingHorizontal: 14,
     paddingVertical: 11,
     color: palette.ink,
-    backgroundColor: "#FFFEFC",
+    backgroundColor: "#F2F3F7",
+    fontFamily,
     fontSize: 16,
   },
   multiline: { minHeight: 88, textAlignVertical: "top" },
   disabledInput: { opacity: 0.55 },
   button: {
-    minHeight: 48,
+    minHeight: 54,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: 38,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
   },
-  button_primary: { backgroundColor: palette.coralDark },
+  button_primary: { backgroundColor: palette.coral },
   button_secondary: {
     backgroundColor: palette.coralPale,
     borderWidth: 1,
-    borderColor: "#EBCFC8",
+    borderColor: palette.coralPale,
   },
   button_quiet: {
     backgroundColor: "transparent",
@@ -386,10 +411,30 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.5 },
   buttonPressed: { opacity: 0.78 },
-  primaryText: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
-  secondaryText: { color: palette.coralDark, fontSize: 15, fontWeight: "700" },
-  quietText: { color: palette.ink, fontSize: 15, fontWeight: "600" },
-  dangerText: { color: palette.danger, fontSize: 15, fontWeight: "700" },
+  primaryText: {
+    color: "#FFFFFF",
+    fontFamily,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  secondaryText: {
+    color: palette.coralDark,
+    fontFamily,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  quietText: {
+    color: palette.ink,
+    fontFamily,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  dangerText: {
+    color: palette.danger,
+    fontFamily,
+    fontSize: 15,
+    fontWeight: "700",
+  },
   chip: {
     minHeight: 44,
     justifyContent: "center",
@@ -400,9 +445,17 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "#FFFFFF",
   },
-  chipSelected: { backgroundColor: palette.bluePale, borderColor: "#BBCBD6" },
-  chipText: { color: palette.muted, fontSize: 14, fontWeight: "600" },
-  chipTextSelected: { color: palette.blue, fontWeight: "700" },
+  chipSelected: {
+    backgroundColor: palette.coralPale,
+    borderColor: palette.coral,
+  },
+  chipText: {
+    color: palette.muted,
+    fontFamily,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  chipTextSelected: { color: palette.coralDark, fontWeight: "700" },
   notice: {
     borderRadius: 14,
     borderWidth: 1,
@@ -412,11 +465,16 @@ const styles = StyleSheet.create({
   noticeInfo: { backgroundColor: palette.bluePale, borderColor: "#CBD9E2" },
   noticeError: { backgroundColor: palette.dangerPale, borderColor: "#E8C7C7" },
   noticeSuccess: { backgroundColor: palette.greenPale, borderColor: "#C7DDCD" },
-  noticeText: { color: palette.ink, fontSize: 14, lineHeight: 20 },
+  noticeText: { color: palette.ink, fontFamily, fontSize: 14, lineHeight: 20 },
   inlineLink: {
     minHeight: 44,
     justifyContent: "center",
     alignSelf: "flex-start",
   },
-  inlineLinkText: { color: palette.coralDark, fontSize: 15, fontWeight: "700" },
+  inlineLinkText: {
+    color: palette.coralDark,
+    fontFamily,
+    fontSize: 15,
+    fontWeight: "700",
+  },
 });

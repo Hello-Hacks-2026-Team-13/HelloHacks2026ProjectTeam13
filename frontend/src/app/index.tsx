@@ -1,5 +1,16 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Share, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { Image } from "expo-image";
+import { artwork, fontFamily } from "@/constants/design";
+import type { Plan } from "../../../shared/types";
 import { router } from "expo-router";
 import { acrossApi, useAcross } from "@/lib/across";
 import {
@@ -69,7 +80,7 @@ export default function HomeScreen() {
     return (
       <Screen
         eyebrow="A little closer, wherever you are"
-        title="Make room for a moment together."
+        title="Welcome Back!"
         description="Sign in with a one-time email link to open your private shared space."
       >
         {error ? (
@@ -131,24 +142,19 @@ export default function HomeScreen() {
 
   return (
     <Screen
-      eyebrow={
-        partner ? "A little time, just for you two" : "Your story starts here"
-      }
+      header="people"
+      adornment={partner ? "sunrise" : undefined}
       title={
-        nextPlan
-          ? "You have a date."
-          : partner
-            ? "Different time zones. Same wavelength."
-            : room
-              ? "Your shared space is ready."
-              : "Make room for a moment together."
+        partner
+          ? `${greeting(now, me?.timezone)}, ${me?.name || "you"}`
+          : room
+            ? "Your shared space is ready."
+            : "Make room for a moment together."
       }
       description={
-        nextPlan
-          ? `${nextPlan.activity.title} is on the calendar. Keep the anticipation close.`
-          : partner
-            ? "Find a pocket of time and turn it into something worth looking forward to."
-            : "Create your private space, invite your person, and find your next moment together."
+        partner
+          ? "Dashboard"
+          : "Create your private space, invite your person, and find your next moment together."
       }
     >
       {error ? (
@@ -224,38 +230,84 @@ export default function HomeScreen() {
         </Card>
       ) : partner ? (
         <>
-          <Card style={styles.heroCard}>
-            <View
-              style={styles.orbit}
-              accessibilityElementsHidden
-              importantForAccessibility="no-hide-descendants"
-            >
-              <View style={styles.sun} />
-              <View style={styles.moon} />
-              <Text style={styles.orbitMark}>♡</Text>
-            </View>
-            <Heading
-              detail={
-                nextPlan
-                  ? `${formatDate(nextPlan.slot.start, me?.timezone)} · ${formatTime(nextPlan.slot.start, me?.timezone)}`
-                  : "Made for your schedules. Chosen by you."
-              }
-            >
-              {nextPlan
-                ? nextPlan.activity.title
-                : `${me?.name || "You"} & ${partner.name}`}
-            </Heading>
-            <View style={styles.quickActions}>
-              <Button
-                onPress={() => router.push(nextPlan ? "/plans" : "/ideas")}
+          {room.plans
+            .filter(
+              (plan) =>
+                plan.status === "saved" && Date.parse(plan.slot.end) > now,
+            )
+            .sort((a, b) => Date.parse(a.slot.start) - Date.parse(b.slot.start))
+            .slice(0, 2)
+            .map((plan) => (
+              <HomeDate
+                key={plan.id}
+                plan={plan}
+                timezone={me?.timezone || "UTC"}
+                partnerTimezone={partner.timezone}
+              />
+            ))}
+          {!nextPlan ? (
+            <Card style={styles.heroCard}>
+              <Heading detail="A movie, a game, or something delicious. Find a little time for each other.">
+                Your next date starts here
+              </Heading>
+              <Button onPress={() => router.push("/ideas")}>
+                Find our next date
+              </Button>
+            </Card>
+          ) : null}
+          {room.offers.length ? (
+            <View style={{ gap: 16 }}>
+              <Heading>Recommended for you</Heading>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 20, paddingBottom: 4 }}
               >
-                {nextPlan ? "See our plan" : "Find our next date"}
-              </Button>
-              <Button kind="secondary" onPress={() => router.push("/time")}>
-                Our availability
-              </Button>
+                {room.offers.map((offer) => (
+                  <Pressable
+                    key={offer.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`View idea: ${offer.activity.title}`}
+                    onPress={() => router.push("/ideas")}
+                    style={{ width: 162, gap: 7 }}
+                  >
+                    {offer.activity.poster ? (
+                      <Image
+                        source={{ uri: offer.activity.poster }}
+                        contentFit="cover"
+                        style={styles.recommendationImage}
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          styles.recommendationImage,
+                          styles.recommendationFallback,
+                        ]}
+                      >
+                        <Text style={styles.kind}>
+                          {offer.activity.kind === "meal"
+                            ? "RECIPE"
+                            : offer.activity.kind.toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                    <Text numberOfLines={2} style={styles.recommendationTitle}>
+                      {offer.activity.title}
+                    </Text>
+                    <Text style={styles.recommendationMeta}>
+                      {offer.activity.kind === "meal"
+                        ? "RECIPE"
+                        : offer.activity.kind.toUpperCase()}{" "}
+                      · {offer.activity.minutes} MIN
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
             </View>
-          </Card>
+          ) : null}
+          <Button kind="quiet" onPress={() => router.push("/time")}>
+            Our time · Edit availability
+          </Button>
 
           <Card>
             <Heading detail="Schedules use each person’s local time, so the app can find a window that works for both.">
@@ -300,18 +352,26 @@ export default function HomeScreen() {
             ) : null}
           </Card>
 
-          <Card>
-            <Heading detail="One prompt. Two photos. A little piece of each other’s day.">
-              Our daily moment
-            </Heading>
-            <Body>
-              Share a photo, wait for the reveal, then leave a little love. Each
-              moment disappears after 24 hours.
-            </Body>
-            <Button onPress={() => router.push("/moment")}>
-              Open our daily moment
-            </Button>
-          </Card>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open our daily moment"
+            onPress={() => router.push("/moment")}
+            style={styles.momentCard}
+          >
+            <Image
+              source={artwork.promptHeart}
+              contentFit="contain"
+              style={{ width: 24, height: 24 }}
+            />
+            <Text style={styles.momentEyebrow}>
+              When your days don’t line up
+            </Text>
+            <Text style={styles.momentTitle}>Our Daily Moment</Text>
+            <Text style={styles.momentCopy}>
+              One prompt. Two photos. A little piece of each other’s day.
+            </Text>
+            <Text style={styles.momentAction}>Share today’s moment →</Text>
+          </Pressable>
         </>
       ) : (
         <>
@@ -395,6 +455,66 @@ export default function HomeScreen() {
   );
 }
 
+function greeting(now: number, timezone = "UTC") {
+  const hour = Number(
+    new Intl.DateTimeFormat("en", {
+      hour: "numeric",
+      hourCycle: "h23",
+      timeZone: timezone,
+    }).format(now),
+  );
+  return hour < 12
+    ? "Good Morning"
+    : hour < 18
+      ? "Good Afternoon"
+      : "Good Evening";
+}
+function HomeDate({
+  plan,
+  timezone,
+  partnerTimezone,
+}: {
+  plan: Plan;
+  timezone: string;
+  partnerTimezone: string;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`See our plan: ${plan.activity.title}`}
+      onPress={() => router.push("/plans")}
+      style={styles.dateHero}
+    >
+      {plan.activity.poster ? (
+        <Image
+          source={{ uri: plan.activity.poster }}
+          contentFit="cover"
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+      <View style={styles.dateOverlay} />
+      <Text style={styles.dateTitle}>{plan.activity.title}</Text>
+      <Text style={styles.dateKind}>
+        {plan.activity.kind === "meal"
+          ? "RECIPE"
+          : plan.activity.kind.toUpperCase()}
+      </Text>
+      <View style={styles.dateFooter}>
+        <View style={{ gap: 10 }}>
+          <Text style={styles.datePill}>
+            {formatDate(plan.slot.start, timezone).toUpperCase()}
+          </Text>
+          <Text style={styles.dateTimes}>
+            {formatTime(plan.slot.start, timezone)} /{" "}
+            {formatTime(plan.slot.start, partnerTimezone)}
+          </Text>
+        </View>
+        <Text style={styles.viewPlan}>VIEW PLAN</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 function initials(name: string) {
   return (
     name
@@ -429,25 +549,106 @@ function formatTime(value: string, timezone = "UTC") {
 
 const styles = StyleSheet.create({
   segment: { flexDirection: "row", gap: 8 },
-  heroCard: { backgroundColor: "#F5EEE4", overflow: "hidden" },
-  orbit: {
-    height: 140,
-    backgroundColor: "#EEE3D6",
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 16,
+  heroCard: {
+    backgroundColor: palette.peach,
+    overflow: "hidden",
+    borderColor: palette.peach,
   },
-  sun: { width: 62, height: 62, borderRadius: 31, backgroundColor: "#D77A65" },
-  moon: { width: 52, height: 52, borderRadius: 26, backgroundColor: "#8299A7" },
-  orbitMark: {
+  dateHero: {
+    minHeight: 157,
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: "#62659B",
+    padding: 22,
+    justifyContent: "center",
+  },
+  dateOverlay: {
     position: "absolute",
-    color: "#FFFFFF",
-    fontSize: 22,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: "rgba(49,35,92,0.55)",
+  },
+  dateTitle: { fontFamily, fontSize: 19, fontWeight: "700", color: "white" },
+  dateKind: {
+    fontFamily,
+    color: "white",
+    fontSize: 11,
+    letterSpacing: 1,
+    marginTop: 3,
+  },
+  dateFooter: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    marginTop: 16,
+  },
+  datePill: {
+    fontFamily,
+    color: palette.ink,
+    fontSize: 11,
+    backgroundColor: "#FFFFFFE6",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    alignSelf: "flex-start",
+  },
+  dateTimes: { fontFamily, color: "white", fontSize: 11 },
+  viewPlan: {
+    fontFamily,
+    color: "#561B2A",
+    fontSize: 12,
+    fontWeight: "600",
+    borderRadius: 24,
+    paddingHorizontal: 17,
+    paddingVertical: 12,
+    backgroundColor: "#FFAEBB",
+  },
+  recommendationImage: {
+    width: 162,
+    height: 113,
+    borderRadius: 10,
+    backgroundColor: palette.bluePale,
+  },
+  recommendationFallback: { alignItems: "center", justifyContent: "center" },
+  kind: { fontFamily, color: palette.blue, fontSize: 12, fontWeight: "700" },
+  recommendationTitle: {
+    fontFamily,
+    color: palette.ink,
+    fontSize: 17,
     fontWeight: "700",
   },
-  quickActions: { gap: 9 },
+  recommendationMeta: {
+    fontFamily,
+    color: palette.muted,
+    fontSize: 10,
+    letterSpacing: 0.6,
+  },
+  momentCard: {
+    backgroundColor: palette.rose,
+    padding: 25,
+    borderRadius: 32,
+    gap: 12,
+  },
+  momentEyebrow: { fontFamily, color: "#4C1623", fontSize: 14 },
+  momentTitle: {
+    fontFamily,
+    color: "#4C1623",
+    fontSize: 26,
+    fontWeight: "700",
+  },
+  momentCopy: { fontFamily, color: "#4C1623", fontSize: 16, lineHeight: 24 },
+  momentAction: {
+    fontFamily,
+    color: "#4C1623",
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "right",
+    marginTop: 8,
+  },
   profileRow: {
     minHeight: 62,
     flexDirection: "row",
